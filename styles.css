@@ -254,7 +254,7 @@ a { color: var(--brand); }
   display: grid;
   gap: 14px;
   margin-top: 18px;
-  scroll-margin-top: 78px;
+  scroll-margin-top: 6px;
 }
 
 .dir-intro { padding: 2px 2px 0; }
@@ -451,7 +451,7 @@ a { color: var(--brand); }
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   background: var(--tray);
-  scroll-margin-top: 78px;
+  scroll-margin-top: 4px;
 }
 
 .workspace:focus { outline: none; }
