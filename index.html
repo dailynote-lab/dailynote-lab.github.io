@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>연봉 실수령액 계산기 · 전세·대출 이자 · 할인율 · 오늘의 운세 | 데일리툴</title>
+<meta name="description" content="2026년 4대보험·근로소득세 기준 연봉 실수령액 계산기, 전세·대출 이자 계산기, 퍼센트·할인율 계산기, 띠별 오늘의 운세와 일상 성향 심리테스트를 한 페이지에서 무료로 이용하세요. 회원가입 없이 모바일에서 바로 계산됩니다.">
+<meta name="keywords" content="연봉 실수령액 계산기, 실수령액, 2026 4대보험, 전세자금대출 이자 계산기, 대출 이자 계산기, 원리금균등, 원금균등, 할인율 계산기, 퍼센트 계산기, 오늘의 운세, 띠별 운세, 심리테스트">
+<meta name="author" content="데일리툴">
+<meta name="robots" content="index, follow, max-image-preview:large">
+<meta name="theme-color" content="#3b5bdb">
+<meta name="color-scheme" content="light dark">
+<link rel="canonical" href="https://dailynote-lab.github.io/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="favicon.svg">
+<link rel="stylesheet" href="styles.css">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="데일리툴">
+<meta property="og:locale" content="ko_KR">
+<meta property="og:title" content="연봉 실수령액 · 대출이자 · 할인율 · 오늘의 운세 | 데일리툴">
+<meta property="og:description" content="월급 실수령액부터 전세대출 이자, 할인율, 띠별 오늘의 운세까지. 회원가입 없이 모바일에서 바로 쓰는 무료 생활 계산기.">
+<meta property="og:url" content="https://dailynote-lab.github.io/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="연봉 실수령액 · 대출이자 · 할인율 · 오늘의 운세 | 데일리툴">
+<meta name="twitter:description" content="월급 실수령액, 전세대출 이자, 할인율 계산과 오늘의 운세를 한 페이지에서 무료로.">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://dailynote-lab.github.io/#website",
+      "url": "https://dailynote-lab.github.io/",
+      "name": "데일리툴",
+      "inLanguage": "ko-KR",
+      "description": "생활·재테크 계산기와 오늘의 운세, 심리테스트를 모은 무료 웹 도구 모음"
+    },
+    {
+      "@type": "WebApplication",
+      "name": "데일리툴 - 생활 계산기 & 오늘의 운세",
+      "url": "https://dailynote-lab.github.io/",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "Web",
+      "inLanguage": "ko-KR",
+      "browserRequirements": "Requires JavaScript",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "KRW" },
+      "featureList": [
+        "연봉 실수령액 계산기 (2026년 4대보험·근로소득세 기준)",
+        "전세·대출 이자 계산기 (원리금균등·원금균등·만기일시)",
+        "퍼센트·할인율 계산기",
+        "생년월일·띠별 오늘의 운세",
+        "일상 성향 심리테스트"
+      ]
+    },
+    {
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "연봉 실수령액은 어떻게 계산하나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "연봉에서 4대보험 근로자 부담분과 근로소득세·지방소득세를 뺀 금액입니다. 2026년 요율은 국민연금 4.75%, 건강보험 3.595%, 장기요양보험(건강보험료의 13.14%), 고용보험 0.9%이며, 소득세는 근로소득공제와 기본공제·연금보험료공제·건강보험료공제·표준세액공제를 반영한 뒤 기본세율과 근로소득세액공제를 적용해 계산합니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "전세자금대출 이자는 어떤 상환방식으로 계산하나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "전세자금대출은 만기에 원금을 한 번에 갚고 그동안 이자만 내는 만기일시상환이 흔합니다. 데일리툴은 만기일시상환·원리금균등·원금균등 세 가지 방식을 모두 계산할 수 있습니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "계산 결과가 실제 금액과 다른 이유는 무엇인가요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "연말정산 공제 항목(부양가족, 자녀, 의료비, 연금저축 등), 회사별 비과세 수당, 상여 지급 시기, 국민연금 기준소득월액 고지 시점 차이에 따라 실제 금액은 달라집니다. 결과는 참고용 예상치입니다."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "오늘의 운세는 무엇을 기준으로 만드나요?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "생년월일로 띠를 구하고, 그날의 날짜와 띠를 조합한 고정된 값으로 점수를 만듭니다. 같은 날에는 몇 번을 봐도 같은 결과가 나오며, 다음 날이면 새로 바뀝니다. 재미로 보는 콘텐츠입니다."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+<body data-section="calc">
+
+<a class="skip-link" href="#main">본문으로 바로가기</a>
+
+<header class="site-header">
+  <div class="wrap header-inner">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <rect x="4" y="3" width="16" height="18" rx="3"></rect>
+          <path d="M8 8h8M8 12h2M12 12h2M16 12h2M8 16h2M12 16h2M16 16h2"></path>
+        </svg>
+      </span>
+      <div class="brand-text">
+        <h1 class="brand-name">데일리툴</h1>
+        <p class="brand-sub">생활 계산기 · 오늘의 운세</p>
+      </div>
+    </div>
+
+    <nav class="segment segment-main" role="tablist" aria-label="메뉴 선택">
+      <button type="button" class="segment-btn" role="tab" id="tab-calc" aria-controls="panel-calc" aria-selected="true" data-section="calc">계산기</button>
+      <button type="button" class="segment-btn" role="tab" id="tab-fun" aria-controls="panel-fun" aria-selected="false" data-section="fun">운세·테스트</button>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap">
+
+  <!-- ================= 계산기 ================= -->
+  <section id="panel-calc" role="tabpanel" aria-labelledby="tab-calc" tabindex="-1">
+
+    <div class="chips" role="tablist" aria-label="계산기 종류">
+      <button type="button" class="chip" role="tab" aria-selected="true" data-tool="salary">💰 연봉 실수령액</button>
+      <button type="button" class="chip" role="tab" aria-selected="false" data-tool="loan">🏦 전세·대출 이자</button>
+      <button type="button" class="chip" role="tab" aria-selected="false" data-tool="percent">🏷️ 할인·퍼센트</button>
+    </div>
+
+    <!-- 연봉 실수령액 -->
+    <div class="tool" id="tool-salary" role="tabpanel" aria-label="연봉 실수령액 계산기">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">연봉 실수령액 계산기</h2>
+          <p class="card-desc">2026년 4대보험 요율과 근로소득세를 반영한 <strong>예상 금액</strong>입니다.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="salary">연봉 총액</label>
+          <div class="input-row">
+            <input class="input input-num" id="salary" type="text" inputmode="numeric" autocomplete="off" value="4,000" data-int aria-describedby="salary-hint">
+            <span class="unit">만원</span>
+          </div>
+          <div class="presets" role="group" aria-label="연봉 빠른 선택">
+            <button type="button" class="preset" data-target="salary" data-value="3000">3,000</button>
+            <button type="button" class="preset" data-target="salary" data-value="4000">4,000</button>
+            <button type="button" class="preset" data-target="salary" data-value="5000">5,000</button>
+            <button type="button" class="preset" data-target="salary" data-value="6000">6,000</button>
+            <button type="button" class="preset" data-target="salary" data-value="8000">8,000</button>
+            <button type="button" class="preset" data-target="salary" data-value="10000">1억</button>
+          </div>
+          <p class="hint" id="salary-hint">계약서상 세전 연봉. 월 환산은 12개월 균등 지급으로 가정합니다.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="salary-nontax">월 비과세 수당 <span class="label-sub">선택</span></label>
+          <div class="input-row">
+            <input class="input input-num" id="salary-nontax" type="text" inputmode="numeric" autocomplete="off" value="0" data-int aria-describedby="nontax-hint">
+            <span class="unit">원</span>
+          </div>
+          <p class="hint" id="nontax-hint">식대는 월 20만원까지, 자가운전보조금은 월 20만원까지 비과세입니다. 4대보험·소득세 모두에서 빠집니다.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="salary-deps">공제대상 가족 수 <span class="label-sub">본인 포함</span></label>
+          <select class="input select" id="salary-deps">
+            <option value="1" selected>1명 (본인만)</option>
+            <option value="2">2명</option>
+            <option value="3">3명</option>
+            <option value="4">4명</option>
+            <option value="5">5명</option>
+            <option value="6">6명 이상</option>
+          </select>
+          <p class="hint">기본공제 1인당 연 150만원. 자녀·부모님을 함께 적으면 실제에 가까워집니다.</p>
+        </div>
+
+        <div class="result" aria-live="polite">
+          <div class="result-hero">
+            <p class="result-label">월 실수령액 (예상)</p>
+            <p class="result-value" id="res-salary-month">—</p>
+            <p class="result-sub">연 <span id="res-salary-year">—</span></p>
+          </div>
+
+          <ul class="stat-grid">
+            <li><span class="stat-label">월 공제 합계</span><span class="stat-value" id="res-salary-deduct">—</span></li>
+            <li><span class="stat-label">4대보험 (월)</span><span class="stat-value" id="res-salary-ins">—</span></li>
+            <li><span class="stat-label">세금 (월)</span><span class="stat-value" id="res-salary-tax">—</span></li>
+            <li><span class="stat-label">실수령률</span><span class="stat-value" id="res-salary-rate">—</span></li>
+          </ul>
+
+          <details class="breakdown">
+            <summary>공제 내역 자세히 보기</summary>
+            <ul class="kv-list">
+              <li><span>국민연금 (4.75%)</span><span id="bd-np">—</span></li>
+              <li><span>건강보험 (3.595%)</span><span id="bd-hi">—</span></li>
+              <li><span>장기요양보험 (건보료의 13.14%)</span><span id="bd-lt">—</span></li>
+              <li><span>고용보험 (0.9%)</span><span id="bd-ei">—</span></li>
+              <li class="kv-sub"><span>4대보험 소계</span><span id="bd-ins">—</span></li>
+              <li><span>근로소득세</span><span id="bd-it">—</span></li>
+              <li><span>지방소득세</span><span id="bd-lt2">—</span></li>
+              <li class="kv-sub"><span>세금 소계</span><span id="bd-tax">—</span></li>
+            </ul>
+            <p class="hint">국민연금은 기준소득월액 상한 659만원·하한 41만원이 적용됩니다. 건강보험료는 본인 부담 상한 월 4,591,740원, 하한 10,080원이 적용됩니다. 10원 미만은 버림.</p>
+          </details>
+        </div>
+      </div>
+    </div>
+
+    <!-- 전세·대출 이자 -->
+    <div class="tool" id="tool-loan" role="tabpanel" aria-label="전세 대출 이자 계산기" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">전세·대출 이자 계산기</h2>
+          <p class="card-desc">상환방식별 월 납입액과 총 이자를 비교해 보세요.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="loan-amount">대출 금액</label>
+          <div class="input-row">
+            <input class="input input-num" id="loan-amount" type="text" inputmode="numeric" autocomplete="off" value="30,000" data-int aria-describedby="loan-amount-hint">
+            <span class="unit">만원</span>
+          </div>
+          <div class="presets" role="group" aria-label="대출 금액 빠른 선택">
+            <button type="button" class="preset" data-target="loan-amount" data-value="10000">1억</button>
+            <button type="button" class="preset" data-target="loan-amount" data-value="20000">2억</button>
+            <button type="button" class="preset" data-target="loan-amount" data-value="30000">3억</button>
+            <button type="button" class="preset" data-target="loan-amount" data-value="50000">5억</button>
+          </div>
+          <p class="hint" id="loan-amount-hint">3억원 = 30,000만원</p>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label class="label" for="loan-term">기간</label>
+            <div class="input-row">
+              <input class="input input-num" id="loan-term" type="text" inputmode="decimal" autocomplete="off" value="2">
+              <select class="input select select-slim" id="loan-term-unit" aria-label="기간 단위">
+                <option value="year" selected>년</option>
+                <option value="month">개월</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label class="label" for="loan-rate">연 이율</label>
+            <div class="input-row">
+              <input class="input input-num" id="loan-rate" type="text" inputmode="decimal" autocomplete="off" value="3.5">
+              <span class="unit">%</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label class="label" for="loan-method">상환 방식</label>
+          <select class="input select" id="loan-method">
+            <option value="bullet" selected>만기일시상환 — 이자만 내다가 만기에 원금</option>
+            <option value="equal-payment">원리금균등상환 — 매달 같은 금액</option>
+            <option value="equal-principal">원금균등상환 — 원금은 같게, 이자는 줄어듦</option>
+          </select>
+        </div>
+
+        <div class="result" aria-live="polite">
+          <div class="result-hero">
+            <p class="result-label" id="res-loan-label">월 이자 (예상)</p>
+            <p class="result-value" id="res-loan-monthly">—</p>
+            <p class="result-sub" id="res-loan-note">—</p>
+          </div>
+
+          <ul class="stat-grid">
+            <li><span class="stat-label">총 이자</span><span class="stat-value" id="res-loan-interest">—</span></li>
+            <li><span class="stat-label">총 상환액</span><span class="stat-value" id="res-loan-total">—</span></li>
+            <li><span class="stat-label">납입 횟수</span><span class="stat-value" id="res-loan-count">—</span></li>
+            <li><span class="stat-label">이자 비중</span><span class="stat-value" id="res-loan-ratio">—</span></li>
+          </ul>
+
+          <details class="breakdown">
+            <summary>상환 스케줄 요약</summary>
+            <ul class="kv-list" id="loan-schedule">
+              <li><span>—</span><span>—</span></li>
+            </ul>
+            <p class="hint">원 단위는 반올림했습니다. 실제 은행 계산은 일수 계산(365일 기준)과 인지세·근저당 설정 비용 등이 더해져 조금 달라질 수 있습니다.</p>
+          </details>
+        </div>
+      </div>
+
+      <div class="card card-note">
+        <h3 class="note-title">전세자금대출은 보통 ‘만기일시’입니다</h3>
+        <p>전세자금대출·신용대출 만기 일시상환은 계약 기간 동안 <strong>이자만</strong> 내고, 만기에 원금을 한 번에 갚는 방식입니다. 위에서 <strong>만기일시상환</strong>을 고르면 매달 나가는 이자와 만기에 준비해야 할 금액을 함께 볼 수 있습니다.</p>
+      </div>
+    </div>
+
+    <!-- 할인·퍼센트 -->
+    <div class="tool" id="tool-percent" role="tabpanel" aria-label="퍼센트 할인율 계산기" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">퍼센트·할인율 계산기</h2>
+          <p class="card-desc">값을 넣으면 바로 계산됩니다.</p>
+        </div>
+
+        <div class="chips chips-inset" role="tablist" aria-label="계산 종류">
+          <button type="button" class="chip chip-sm" role="tab" aria-selected="true" data-pmode="p1">값의 %</button>
+          <button type="button" class="chip chip-sm" role="tab" aria-selected="false" data-pmode="p2">비율</button>
+          <button type="button" class="chip chip-sm" role="tab" aria-selected="false" data-pmode="p3">증감률</button>
+          <button type="button" class="chip chip-sm" role="tab" aria-selected="false" data-pmode="p4">할인</button>
+        </div>
+
+        <!-- 값의 % -->
+        <div class="pmode" id="pmode-p1">
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="p1-x">값</label>
+              <input class="input input-num" id="p1-x" type="text" inputmode="decimal" value="50,000" data-num>
+            </div>
+            <div class="field">
+              <label class="label" for="p1-y">비율</label>
+              <div class="input-row">
+                <input class="input input-num" id="p1-y" type="text" inputmode="decimal" value="15">
+                <span class="unit">%</span>
+              </div>
+            </div>
+          </div>
+          <div class="mini-result">
+            <span class="mini-label">50,000의 15%</span>
+            <strong class="mini-value" id="p1-out">—</strong>
+          </div>
+        </div>
+
+        <!-- 비율 -->
+        <div class="pmode" id="pmode-p2" hidden>
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="p2-a">부분 값 (A)</label>
+              <input class="input input-num" id="p2-a" type="text" inputmode="decimal" value="30,000" data-num>
+            </div>
+            <div class="field">
+              <label class="label" for="p2-b">전체 값 (B)</label>
+              <input class="input input-num" id="p2-b" type="text" inputmode="decimal" value="120,000" data-num>
+            </div>
+          </div>
+          <div class="mini-result">
+            <span class="mini-label">A는 B의</span>
+            <strong class="mini-value" id="p2-out">—</strong>
+          </div>
+        </div>
+
+        <!-- 증감률 -->
+        <div class="pmode" id="pmode-p3" hidden>
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="p3-from">이전 값</label>
+              <input class="input input-num" id="p3-from" type="text" inputmode="decimal" value="200,000" data-num>
+            </div>
+            <div class="field">
+              <label class="label" for="p3-to">이후 값</label>
+              <input class="input input-num" id="p3-to" type="text" inputmode="decimal" value="250,000" data-num>
+            </div>
+          </div>
+          <div class="mini-result">
+            <span class="mini-label">증감률</span>
+            <strong class="mini-value" id="p3-out">—</strong>
+            <span class="mini-aside" id="p3-diff">—</span>
+          </div>
+        </div>
+
+        <!-- 할인 -->
+        <div class="pmode" id="pmode-p4" hidden>
+          <p class="pmode-title">할인가 구하기</p>
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="p4-price">정가</label>
+              <div class="input-row">
+                <input class="input input-num" id="p4-price" type="text" inputmode="decimal" value="39,000" data-num>
+                <span class="unit">원</span>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="p4-rate">할인율</label>
+              <div class="input-row">
+                <input class="input input-num" id="p4-rate" type="text" inputmode="decimal" value="30">
+                <span class="unit">%</span>
+              </div>
+            </div>
+          </div>
+          <div class="mini-result">
+            <span class="mini-label">할인가</span>
+            <strong class="mini-value" id="p4-out">—</strong>
+            <span class="mini-aside" id="p4-cut">—</span>
+          </div>
+
+          <p class="pmode-title pmode-title-gap">할인율 구하기</p>
+          <div class="field-row">
+            <div class="field">
+              <label class="label" for="p5-price">정가</label>
+              <div class="input-row">
+                <input class="input input-num" id="p5-price" type="text" inputmode="decimal" value="39,000" data-num>
+                <span class="unit">원</span>
+              </div>
+            </div>
+            <div class="field">
+              <label class="label" for="p5-sale">판매가</label>
+              <div class="input-row">
+                <input class="input input-num" id="p5-sale" type="text" inputmode="decimal" value="27,300" data-num>
+                <span class="unit">원</span>
+              </div>
+            </div>
+          </div>
+          <div class="mini-result">
+            <span class="mini-label">할인율</span>
+            <strong class="mini-value" id="p5-out">—</strong>
+            <span class="mini-aside" id="p5-cut">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 운세·테스트 ================= -->
+  <section id="panel-fun" role="tabpanel" aria-labelledby="tab-fun" tabindex="-1" hidden>
+
+    <div class="chips" role="tablist" aria-label="운세와 테스트">
+      <button type="button" class="chip" role="tab" aria-selected="true" data-tool="fortune">🔮 오늘의 운세</button>
+      <button type="button" class="chip" role="tab" aria-selected="false" data-tool="quiz">🧠 심리테스트</button>
+    </div>
+
+    <!-- 오늘의 운세 -->
+    <div class="tool" id="tool-fortune" role="tabpanel" aria-label="오늘의 운세">
+      <div class="card">
+        <div class="card-head">
+          <h2 class="card-title">오늘의 운세</h2>
+          <p class="card-desc" id="fortune-today">—</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="fortune-birth">생년월일 <span class="label-sub">양력</span></label>
+          <input class="input" id="fortune-birth" type="date" min="1900-01-01" max="2026-12-31">
+          <p class="hint">음력 생일이거나 생일을 넣지 않으려면 아래에서 띠를 직접 골라도 됩니다.</p>
+        </div>
+
+        <div class="field">
+          <label class="label" for="fortune-zodiac">띠로 보기 <span class="label-sub">선택</span></label>
+          <select class="input select" id="fortune-zodiac">
+            <option value="">생년월일로 자동 선택</option>
+            <option value="쥐">쥐띠</option>
+            <option value="소">소띠</option>
+            <option value="호랑이">호랑이띠</option>
+            <option value="토끼">토끼띠</option>
+            <option value="용">용띠</option>
+            <option value="뱀">뱀띠</option>
+            <option value="말">말띠</option>
+            <option value="양">양띠</option>
+            <option value="원숭이">원숭이띠</option>
+            <option value="닭">닭띠</option>
+            <option value="개">개띠</option>
+            <option value="돼지">돼지띠</option>
+          </select>
+        </div>
+
+        <div class="result" id="fortune-result" aria-live="polite" hidden>
+          <div class="result-hero">
+            <p class="result-label" id="fortune-who">—</p>
+            <p class="result-value" id="fortune-score">—</p>
+            <p class="result-sub" id="fortune-tagline">—</p>
+          </div>
+
+          <ul class="bars" id="fortune-bars"></ul>
+
+          <div class="fortune-block">
+            <h3 class="block-title">오늘의 한마디</h3>
+            <p class="block-text" id="fortune-advice">—</p>
+          </div>
+
+          <div class="fortune-block">
+            <h3 class="block-title">행운 포인트</h3>
+            <ul class="luck-grid" id="fortune-luck"></ul>
+          </div>
+
+          <div class="fortune-block">
+            <h3 class="block-title">조심할 것</h3>
+            <p class="block-text" id="fortune-caution">—</p>
+          </div>
+
+          <div class="fortune-block">
+            <h3 class="block-title">오늘의 띠별 순위</h3>
+            <ol class="rank-list" id="fortune-rank"></ol>
+          </div>
+
+          <button type="button" class="btn btn-ghost" id="fortune-copy">결과 텍스트 복사</button>
+        </div>
+
+        <p class="empty" id="fortune-empty">생년월일을 넣으면 오늘의 운세가 열립니다. 🔮</p>
+      </div>
+    </div>
+
+    <!-- 심리테스트 -->
+    <div class="tool" id="tool-quiz" role="tabpanel" aria-label="심리테스트" hidden>
+      <div class="card">
+        <div class="chips chips-inset" role="tablist" aria-label="테스트 선택">
+          <button type="button" class="chip chip-sm" role="tab" aria-selected="true" data-quiz="spend">소비 성향</button>
+          <button type="button" class="chip chip-sm" role="tab" aria-selected="false" data-quiz="stress">스트레스 대처</button>
+        </div>
+        <div id="quiz-body"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="faq" aria-labelledby="faq-title">
+    <h2 class="faq-title" id="faq-title">계산 기준과 자주 묻는 질문</h2>
+
+    <div class="card card-note">
+      <h3 class="note-title">2026년 4대보험 근로자 부담 요율</h3>
+      <div class="table-scroll">
+        <table class="rate-table">
+          <caption class="sr-only">2026년 4대보험 근로자 부담 요율</caption>
+          <thead>
+            <tr><th scope="col">항목</th><th scope="col">근로자</th><th scope="col">부과 기준</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">국민연금</th><td>4.75%</td><td>기준소득월액</td></tr>
+            <tr><th scope="row">건강보험</th><td>3.595%</td><td>보수월액</td></tr>
+            <tr><th scope="row">장기요양보험</th><td>건보료의 13.14%</td><td>보수월액의 0.9448% 중 절반</td></tr>
+            <tr><th scope="row">고용보험</th><td>0.9%</td><td>실업급여분, 보수월액</td></tr>
+            <tr class="rate-total"><th scope="row">합계</th><td>9.7174%</td><td>월급의 약 9.7%</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="hint">산재보험과 고용안정·직업능력개발 보험료는 전액 사업주 부담이라 근로자 공제에 들어가지 않습니다.</p>
+    </div>
+
+    <div class="faq-list">
+      <details class="faq-item">
+        <summary>연봉 실수령액은 어떻게 계산하나요?</summary>
+        <p>연봉에서 4대보험 근로자 부담분과 근로소득세·지방소득세를 뺀 금액입니다. 국민연금은 기준소득월액(상한 659만원·하한 41만원)에 4.75%, 건강보험은 보수월액에 3.595%, 장기요양보험은 건강보험료의 13.14%, 고용보험은 보수월액에 0.9%를 적용합니다. 소득세는 근로소득공제와 기본공제·연금보험료공제·건강보험료공제·표준세액공제를 반영한 과세표준에 기본세율을 적용하고, 근로소득세액공제를 뺀 뒤 지방소득세 10%를 더해 계산합니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>전세자금대출 이자는 어떤 상환방식으로 계산하나요?</summary>
+        <p>전세자금대출은 만기에 원금을 한 번에 갚고 그동안 이자만 내는 <strong>만기일시상환</strong>이 흔합니다. 이 계산기는 만기일시상환·원리금균등상환·원금균등상환 세 가지를 모두 계산합니다. 만기일시를 고르면 매달 나가는 이자와 만기에 준비해야 할 원금을 함께 볼 수 있습니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>계산 결과가 실제 금액과 다른 이유는 무엇인가요?</summary>
+        <p>연말정산에서 반영되는 자녀세액공제, 연금계좌·보험료 세액공제, 의료비·교육비·월세 공제, 회사별 비과세 수당, 상여 지급 시기, 국민연금 고지 시점 차이 때문에 실제 금액은 달라집니다. 이 페이지의 결과는 참고용 예상치입니다.</p>
+      </details>
+      <details class="faq-item">
+        <summary>오늘의 운세는 무엇을 기준으로 만드나요?</summary>
+        <p>생년월일로 띠와 별자리를 구하고, 그날의 날짜와 띠를 조합한 고정된 값으로 점수를 만듭니다. 같은 날에는 몇 번을 봐도 결과가 같고, 날짜가 바뀌면 새로 바뀝니다. 재미로 보는 콘텐츠이며 판단의 근거로 쓰기에는 적합하지 않습니다.</p>
+      </details>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <p class="footer-brand">데일리툴</p>
+    <p class="footer-desc">회원가입 없이 무료로 쓰는 생활 계산기와 오늘의 운세 모음입니다. 모든 계산은 사용자의 브라우저 안에서만 이뤄지고, 입력한 값은 어디로도 전송되지 않습니다.</p>
+    <nav class="footer-nav" aria-label="바로가기">
+      <a href="#salary">연봉 실수령액</a>
+      <a href="#loan">전세·대출 이자</a>
+      <a href="#percent">할인·퍼센트</a>
+      <a href="#fortune">오늘의 운세</a>
+      <a href="#quiz">심리테스트</a>
+    </nav>
+    <p class="footer-links">
+      <a href="https://daily-not.tistory.com" target="_blank" rel="noopener">블로그 · daily-not.tistory.com</a>
+    </p>
+    <p class="footer-legal">계산 결과는 참고용 예상치이며 법적·재무적 판단의 근거가 아닙니다. 운세·심리테스트는 재미를 위한 콘텐츠입니다.<br>© 2026 데일리툴. 무료로 제공됩니다.</p>
+  </div>
+</footer>
+
+<script src="app.js" defer></script>
+</body>
+</html>
