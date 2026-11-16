@@ -110,15 +110,45 @@
     fortune: 'fun', quiz: 'fun'
   };
 
+  /* 도구 목록 카드에 보이는 이름과 안내 문구 — 카드·제목·스크롤 대상이 함께 쓴다 */
+  var TOOL_META = {
+    salary: { title: '연봉 실수령액', group: '생활·재테크 계산기' },
+    loan: { title: '전세·대출 이자', group: '생활·재테크 계산기' },
+    percent: { title: '할인·퍼센트', group: '생활·재테크 계산기' },
+    fortune: { title: '오늘의 운세', group: '오늘의 운세·심리테스트' },
+    quiz: { title: '심리테스트', group: '오늘의 운세·심리테스트' }
+  };
+
   var panels = { calc: $('#panel-calc'), fun: $('#panel-fun') };
   var tools = {
     salary: $('#tool-salary'), loan: $('#tool-loan'), percent: $('#tool-percent'),
     fortune: $('#tool-fortune'), quiz: $('#tool-quiz')
   };
-  var sectionButtons = $$('.segment-btn[data-section]');
-  var toolChips = $$('.chip[data-tool]');
+  var toolCards = $$('.tool-card[data-tool]');
+  var workspace = $('#workspace');
+  var wsTitle = $('#workspace-title');
+  var wsKicker = $('#workspace-kicker');
   var lastBySection = { calc: 'salary', fun: 'fortune' };
   var activeTool = 'salary';
+
+  /* 활성 도구 카드로 이동: 목록 → 도구 영역으로 부드럽게 스크롤하고 초점도 옮긴다 */
+  function scrollToWorkspace() {
+    if (!workspace || typeof workspace.scrollIntoView !== 'function') return;
+    try {
+      workspace.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) {
+      try { window.scrollTo(0, 0); } catch (e2) { /* noop */ }
+    }
+  }
+
+  function focusWorkspace() {
+    if (!workspace || typeof workspace.focus !== 'function') return;
+    try {
+      workspace.focus({ preventScroll: true });
+    } catch (e) {
+      try { workspace.focus(); } catch (e2) { /* noop */ }
+    }
+  }
 
   function setTool(name, opts) {
     opts = opts || {};
@@ -129,36 +159,29 @@
 
     document.body.dataset.section = section;
 
-    sectionButtons.forEach(function (b) {
-      var on = b.dataset.section === section;
-      b.setAttribute('aria-selected', String(on));
-      b.tabIndex = on ? 0 : -1;
-    });
     Object.keys(panels).forEach(function (k) { panels[k].hidden = (k !== section); });
-    toolChips.forEach(function (c) {
-      var on = c.dataset.tool === name;
-      c.setAttribute('aria-selected', String(on));
-      c.tabIndex = on ? 0 : -1;
+    Object.keys(tools).forEach(function (k) { if (tools[k]) tools[k].hidden = (k !== name); });
+
+    toolCards.forEach(function (c) {
+      c.setAttribute('aria-pressed', String(c.dataset.tool === name));
     });
-    Object.keys(tools).forEach(function (k) { tools[k].hidden = (k !== name); });
+
+    var meta = TOOL_META[name];
+    if (meta) {
+      if (wsTitle) wsTitle.textContent = meta.title;
+      if (wsKicker) wsKicker.textContent = meta.group;
+    }
 
     if (!opts.silent) {
       try { history.replaceState(null, '', '#' + name); } catch (e) { /* noop */ }
     }
-    if (opts.scroll) {
-      try { window.scrollTo({ top: 0, behavior: 'smooth' }); } catch (e) { window.scrollTo(0, 0); }
-    }
+    if (opts.scroll) scrollToWorkspace();
+    if (opts.focus) focusWorkspace();
   }
 
-  sectionButtons.forEach(function (b) {
-    b.addEventListener('click', function () {
-      setTool(lastBySection[b.dataset.section], { scroll: true });
-    });
-  });
-
-  toolChips.forEach(function (c) {
+  toolCards.forEach(function (c) {
     c.addEventListener('click', function () {
-      setTool(c.dataset.tool, { scroll: true });
+      setTool(c.dataset.tool, { scroll: true, focus: true });
     });
   });
 
@@ -1223,11 +1246,46 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* 개인정보처리방침 모달                                                */
+  /* ------------------------------------------------------------------ */
+  function attachPrivacy() {
+    var dlg = $('#privacy-dialog');
+    var openBtn = $('#open-privacy');
+    var closeBtn = $('#close-privacy');
+    if (!dlg) return;
+
+    function open() {
+      if (typeof dlg.showModal === 'function') {
+        try { dlg.showModal(); return; } catch (e) { /* fallback */ }
+      }
+      dlg.setAttribute('open', '');
+    }
+
+    function close() {
+      if (typeof dlg.close === 'function') {
+        try { dlg.close(); return; } catch (e) { /* fallback */ }
+      }
+      dlg.removeAttribute('open');
+    }
+
+    if (openBtn) openBtn.addEventListener('click', function (e) { e.preventDefault(); open(); });
+    if (closeBtn) closeBtn.addEventListener('click', close);
+
+    /* 바깥(배경) 클릭으로 닫기 */
+    dlg.addEventListener('click', function (e) {
+      if (e.target !== dlg) return;
+      if (typeof dlg.close === 'function') { try { dlg.close(); return; } catch (err) { /* fallback */ } }
+      dlg.removeAttribute('open');
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* init                                                                */
   /* ------------------------------------------------------------------ */
   function init() {
     attachNumericInputs();
     attachPresets();
+    attachPrivacy();
 
     /* 연봉 */
     ['input', 'change'].forEach(function (evt) {
