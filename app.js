@@ -1,5 +1,5 @@
 /* ==========================================================================
-   데일리툴 — app.js
+   일상계산소 — app.js
    모든 계산은 브라우저 안에서만 이루어집니다. 외부 요청 없음.
    ========================================================================== */
 (function () {
@@ -239,6 +239,7 @@
       var summary = historyPending[tool];
       historyItems = historyItems.filter(function (r) { return r.tool !== tool; });
       historyItems.unshift({ tool: tool, summary: summary, at: Date.now() });
+      cloudSave(tool, summary);
       changed = true;
     });
     historyPending = {};
@@ -368,12 +369,213 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* 로그인 · 클라우드 저장 준비 (Supabase)                                */
+  /* ------------------------------------------------------------------ */
+  /* 주소와 키를 비워 두면 라이브러리를 불러오지 않고, 로그인 버튼은
+     정직하게 “준비 중” 안내만 보여 준다. 값을 채워 연결을 켜면 그때만
+     Supabase JS 를 내려받아 로그인·기록 저장을 사용한다.
+     테이블 정의와 RLS 정책은 supabase_schema.sql 참고. */
+  var SUPABASE_CONFIG = { url: '', anonKey: '' };
+  var SUPABASE_LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
+  var supabaseClient = null;
+  var supabaseLoading = null;
+  var authUser = null;
+
+  function supabaseReady() {
+    return !!(SUPABASE_CONFIG.url && SUPABASE_CONFIG.anonKey);
+  }
+
+  /* 라이브러리는 설정이 채워졌을 때만, 처음 필요할 때 한 번 불러온다 */
+  function loadSupabase() {
+    if (!supabaseReady()) return null;
+    if (supabaseClient) return supabaseClient;
+    if (supabaseLoading) return supabaseLoading;
+    if (typeof Promise !== 'function' || typeof document === 'undefined') return null;
+
+    supabaseLoading = new Promise(function (resolve, reject) {
+      var host = document.head || document.body;
+      if (!host || typeof host.appendChild !== 'function') {
+        reject(new Error('script host 없음'));
+        return;
+      }
+      var script = document.createElement('script');
+      script.src = SUPABASE_LIB;
+      script.async = true;
+      script.onload = function () {
+        try {
+          if (!window.supabase || typeof window.supabase.createClient !== 'function') {
+            throw new Error('Supabase 라이브러리를 찾지 못했어요');
+          }
+          supabaseClient = window.supabase.createClient(SUPABASE_CONFIG.url, SUPABASE_CONFIG.anonKey);
+          resolve(supabaseClient);
+        } catch (e) { reject(e); }
+      };
+      script.onerror = function () { reject(new Error('Supabase 라이브러리를 불러오지 못했어요')); };
+      host.appendChild(script);
+    });
+    return supabaseLoading;
+  }
+
+  var AUTH_READY_TEXT = '회원가입·클라우드 저장 오픈 준비 중이에요 (현재는 이 기기에 자동 저장됩니다)';
+
+  function authMessage(text, state) {
+    var el = $('#auth-message');
+    if (!el) return;
+    el.textContent = text || '';
+    if (state) el.setAttribute('data-state', state);
+    else el.removeAttribute('data-state');
+  }
+
+  /* 로그인 상태를 화면에 반영한다 */
+  function renderAuth() {
+    var status = $('#auth-status');
+    var meta = $('#auth-meta');
+    var form = $('#auth-form');
+    var signout = $('#auth-signout');
+    var ready = supabaseReady();
+
+    if (status) {
+      status.hidden = ready;
+      status.textContent = ready
+        ? ''
+        : AUTH_READY_TEXT;
+    }
+    if (form) form.hidden = !ready || !!authUser;
+    if (signout) signout.hidden = !authUser;
+    if (meta) {
+      meta.textContent = authUser && authUser.email
+        ? authUser.email + ' 로 연결됨'
+        : '지금은 이 기기에 자동 저장 중';
+    }
+  }
+
+  /* 로그인한 사용자의 기록은 계정에도 남긴다(연결했을 때만) */
+  function cloudSave(tool, summary) {
+    if (!supabaseClient || !authUser || !tool || !summary) return;
+    try {
+      supabaseClient.from('saved_calculations')
+        .insert({ user_id: authUser.id, tool: tool, summary: summary })
+        .then(function () { }, function () { });
+    } catch (e) { /* 오프라인이거나 권한이 없으면 로컬 기록만 남는다 */ }
+  }
+
+  function attachAuth() {
+    var dlg = $('#auth-dialog');
+    if (!dlg) return;
+
+    function open() {
+      renderAuth();
+      if (typeof dlg.showModal === 'function') {
+        try { dlg.showModal(); return; } catch (e) { /* fallback */ }
+      }
+      dlg.setAttribute('open', '');
+    }
+
+    function close() {
+      if (typeof dlg.close === 'function') {
+        try { dlg.close(); return; } catch (e) { /* fallback */ }
+      }
+      dlg.removeAttribute('open');
+    }
+
+    $$('#open-auth').concat($$('[data-open-auth]')).forEach(function (btn) {
+      btn.addEventListener('click', function (e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        open();
+      });
+    });
+
+    var closeBtn = $('#close-auth');
+    if (closeBtn) closeBtn.addEventListener('click', close);
+    dlg.addEventListener('click', function (e) { if (e.target === dlg) close(); });
+
+    function credentials() {
+      var emailEl = $('#auth-email');
+      var pwEl = $('#auth-password');
+      var email = String(emailEl && emailEl.value != null ? emailEl.value : '').trim();
+      var pw = String(pwEl && pwEl.value != null ? pwEl.value : '');
+      if (!isEmail(email)) { authMessage('이메일 주소를 다시 확인해 주세요. 예: name@example.com', 'warn'); return null; }
+      if (pw.length < 8) { authMessage('비밀번호는 8자 이상으로 정해 주세요.', 'warn'); return null; }
+      return { email: email, password: pw };
+    }
+
+    function afterAuth(res) {
+      authUser = res && res.data ? res.data.user : null;
+      if (authUser) authMessage('로그인했어요. 이제 기록을 계정에도 저장합니다.', 'note');
+      else authMessage('확인 메일을 보냈어요. 메일함에서 인증을 마치면 로그인됩니다.', 'note');
+      renderAuth();
+    }
+
+    function submit(mode) {
+      if (!supabaseReady()) {
+        authMessage(AUTH_READY_TEXT, 'note');
+        return;
+      }
+      var cred = credentials();
+      if (!cred) return;
+      var pending = loadSupabase();
+      if (!pending) { authMessage('로그인 준비 중이에요. 잠시 뒤 다시 시도해 주세요.', 'note'); return; }
+      authMessage('처리 중이에요…', 'note');
+
+      pending.then(function (client) {
+        if (!client || !client.auth) throw new Error('로그인 기능을 불러오지 못했어요');
+        return (mode === 'signup'
+          ? client.auth.signUp({ email: cred.email, password: cred.password })
+          : client.auth.signInWithPassword({ email: cred.email, password: cred.password })
+        ).then(function (res) {
+          if (res && res.error) throw res.error;
+          afterAuth(res);
+        });
+      }).catch(function (err) {
+        authMessage((mode === 'signup' ? '가입하지 못했어요. ' : '로그인하지 못했어요. ') +
+          (err && err.message ? err.message : '잠시 뒤 다시 시도해 주세요.'), 'warn');
+      });
+    }
+
+    var signinBtn = $('#auth-signin');
+    var signupBtn = $('#auth-signup');
+    var signoutBtn = $('#auth-signout');
+    if (signinBtn) signinBtn.addEventListener('click', function () { submit('signin'); });
+    if (signupBtn) signupBtn.addEventListener('click', function () { submit('signup'); });
+    if (signoutBtn) {
+      signoutBtn.addEventListener('click', function () {
+        if (!supabaseClient) { authUser = null; renderAuth(); return; }
+        supabaseClient.auth.signOut().then(function () {
+          authUser = null;
+          authMessage('로그아웃했어요. 기록은 이 기기에 계속 남습니다.', 'note');
+          renderAuth();
+        }, function () {
+          authUser = null;
+          renderAuth();
+        });
+      });
+    }
+
+    /* 연결을 켜 둔 경우에만 이전 세션을 되살린다 */
+    if (supabaseReady()) {
+      var pendingSession = loadSupabase();
+      if (pendingSession) {
+        pendingSession.then(function (client) {
+          if (!client || !client.auth || typeof client.auth.getSession !== 'function') return null;
+          return client.auth.getSession().then(function (res) {
+            var session = res && res.data ? res.data.session : null;
+            authUser = session && session.user ? session.user : null;
+            renderAuth();
+          }, function () { renderAuth(); });
+        }).catch(function () { renderAuth(); });
+      }
+    } else {
+      renderAuth();
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /* 탭 / 라우팅                                                          */
   /* ------------------------------------------------------------------ */
   var TOOL_SECTION = {
     salary: 'calc', severance: 'calc', weekly: 'calc',
     loan: 'calc', percent: 'calc',
-    fortune: 'fun', quiz: 'fun'
+    fortune: 'fun', saju: 'fun', quiz: 'fun'
   };
 
   /* 도구 목록 카드에 보이는 이름과 안내 문구 — 카드·제목·스크롤 대상이 함께 쓴다 */
@@ -384,6 +586,7 @@
     loan: { title: '전세·대출 이자', group: '생활·재테크 계산기' },
     percent: { title: '할인·퍼센트', group: '생활·재테크 계산기' },
     fortune: { title: '오늘의 운세', group: '오늘의 운세·심리테스트' },
+    saju: { title: '사주·만세력', group: '오늘의 운세·심리테스트' },
     quiz: { title: '심리테스트', group: '오늘의 운세·심리테스트' }
   };
 
@@ -391,7 +594,7 @@
   var tools = {
     salary: $('#tool-salary'), severance: $('#tool-severance'), weekly: $('#tool-weekly'),
     loan: $('#tool-loan'), percent: $('#tool-percent'),
-    fortune: $('#tool-fortune'), quiz: $('#tool-quiz')
+    fortune: $('#tool-fortune'), saju: $('#tool-saju'), quiz: $('#tool-quiz')
   };
   var toolCards = $$('.tool-card[data-tool]');
   var workspace = $('#workspace');
@@ -614,7 +817,7 @@
     out.bdTax.textContent = won(tax.total / 12);
 
     setCopyText('salary', [
-      '💰 연봉 실수령액 (예상) — 데일리툴',
+      '💰 연봉 실수령액 (예상) — 일상계산소',
       '연봉 ' + fmt(annual / 10000) + '만원 · 부양가족 ' + deps + '명',
       '월 실수령 ' + won(monthlyNet) + ' / 연 ' + won(annualNet),
       '월 공제 ' + won(monthlyDeduct) + ' (4대보험 ' + won(ins.total) + ' · 세금 ' + won(tax.total / 12) + ')',
@@ -765,7 +968,7 @@
       : method === 'equal-principal' ? '원금균등상환' : '원리금균등상환';
 
     setCopyText('loan', [
-      '🏦 전세·대출 이자 (예상) — 데일리툴',
+      '🏦 전세·대출 이자 (예상) — 일상계산소',
       shortKrw(principal) + ' · ' + months + '개월 · 연 ' + fmt2(ratePct) + '% · ' + methodName,
       label.textContent + ' ' + hero.textContent,
       '총 이자 ' + won(s.totalInterest) + ' / 총 상환액 ' + won(s.total),
@@ -890,7 +1093,7 @@
     if (bd.pay) bd.pay.textContent = won(r.pay);
 
     setCopyText('severance', [
-      '💼 예상 퇴직금 (세전) — 데일리툴',
+      '💼 예상 퇴직금 (세전) — 일상계산소',
       '재직 ' + fmt(r.workDays) + '일 (' + fmt2(r.workDays / 365) + '년분) · 1일 평균임금 ' + won(r.avgDaily),
       '예상 퇴직금 ' + won(r.pay),
       '최근 3개월 임금 총액 ' + won(r.total) + ' ÷ ' + fmt(r.periodDays) + '일',
@@ -979,7 +1182,7 @@
     if (bd.monthpay) bd.monthpay.textContent = won(r.monthHoliday);
 
     setCopyText('weekly', [
-      '⏰ 주휴수당 (예상) — 데일리툴',
+      '⏰ 주휴수당 (예상) — 일상계산소',
       '시급 ' + won(hourly) + ' · 주 ' + fmt2(r.hours) + '시간',
       '주휴수당 ' + won(r.holidayPay) + ' (주휴 ' + fmt2(r.holidayHours) + '시간분)',
       '주급 ' + won(r.weekTotal) + ' / 월 예상 ' + won(r.monthTotal) + ' (4.345주 기준)',
@@ -1079,7 +1282,7 @@
     }
 
     setCopyText('percent', line
-      ? ['🧮 퍼센트·할인 계산 — 데일리툴', line, 'https://' + location.host + '/#percent'].join('\n')
+      ? ['🧮 퍼센트·할인 계산 — 일상계산소', line, 'https://' + location.host + '/#percent'].join('\n')
       : '');
 
     if (user && line) queueHistory('percent', line);
@@ -1334,7 +1537,7 @@
       '',
       '행운의 색 ' + f.color + ' · 숫자 ' + f.number + ' · 시간 ' + f.time,
       '',
-      '데일리툴 · https://' + location.host + '/#fortune'
+      '일상계산소 · https://' + location.host + '/#fortune'
     ];
     var text = lines.join('\n');
 
@@ -1727,7 +1930,7 @@
         '</div>';
 
       quizCopyText = [
-        '🧠 ' + quiz.title + ' 결과 — 데일리툴',
+        '🧠 ' + quiz.title + ' 결과 — 일상계산소',
         t.emoji + ' ' + t.name,
         t.summary,
         '강점: ' + t.strengths.join(' / '),
@@ -1789,6 +1992,424 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* 8) 사주 · 만세력                                                     */
+  /* ------------------------------------------------------------------ */
+  /* 년주·월주는 태양의 겉보기 황경이 15° 배수가 되는 절입 시각으로 나누고,
+     일주는 1949-10-01(갑자일)을 기준으로 한 60일 주기로, 시주는 시두법(五鼠遁)으로
+     계산한다. 절입 시각은 태양 황경을 직접 계산해 구하므로 한국천문연구원
+     발표값과 몇 분 차이가 날 수 있다. */
+
+  var SAJU_STEMS = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+  var SAJU_STEM_KO = ['갑', '을', '병', '정', '무', '기', '경', '신', '임', '계'];
+  var SAJU_BRANCHES = ['子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥'];
+  var SAJU_BRANCH_KO = ['자', '축', '인', '묘', '진', '사', '오', '미', '신', '유', '술', '해'];
+  var SAJU_STEM_EL = ['목', '목', '화', '화', '토', '토', '금', '금', '수', '수'];
+  var SAJU_BRANCH_EL = ['수', '토', '목', '목', '토', '화', '화', '토', '금', '금', '토', '수'];
+  var SAJU_ELEMENTS = ['목', '화', '토', '금', '수'];
+  var SAJU_EL_CLASS = { '목': 'el-mok', '화': 'el-hwa', '토': 'el-to', '금': 'el-geum', '수': 'el-su' };
+
+  /* 12절(節) — 달을 여는 절기. order 0 = 인월(입춘) … 11 = 축월(소한) */
+  var SAJU_TERMS = [
+    { order: 0, lon: 315, name: '입춘' },
+    { order: 1, lon: 345, name: '경칩' },
+    { order: 2, lon: 15, name: '청명' },
+    { order: 3, lon: 45, name: '입하' },
+    { order: 4, lon: 75, name: '망종' },
+    { order: 5, lon: 105, name: '소서' },
+    { order: 6, lon: 135, name: '입추' },
+    { order: 7, lon: 165, name: '백로' },
+    { order: 8, lon: 195, name: '한로' },
+    { order: 9, lon: 225, name: '입동' },
+    { order: 10, lon: 255, name: '대설' },
+    { order: 11, lon: 285, name: '소한' }
+  ];
+
+  var SAJU_STEM_TRAIT = {
+    '甲': '갑목(甲木) · 곧게 자라는 큰 나무. 방향이 정해지면 끝까지 가는 추진력과 원칙이 강점이에요. 휘어지기 어려워 손해를 보면서도 고집을 부릴 수 있으니, 접을 때를 아는 유연함이 보약입니다.',
+    '乙': '을목(乙木) · 덩굴과 풀처럼 부드럽게 뻗는 기운. 눈치가 빠르고 사람 사이를 잇는 힘이 좋아요. 줄기보다 관계에 기대는 경향이 있어, 내 중심을 세우는 연습이 필요합니다.',
+    '丙': '병화(丙火) · 하늘의 태양처럼 밝고 뜨거운 기운. 솔직한 표현과 존재감으로 분위기를 끌어올려요. 감정이 앞서면 말이 세지니, 한 박자 쉬고 말하면 훨씬 좋습니다.',
+    '丁': '정화(丁火) · 촛불처럼 은은하고 오래 타는 기운. 섬세한 관찰과 따뜻한 배려가 강점이에요. 혼자 삭히는 일이 많으니 속마음을 말로 꺼내는 연습이 도움이 됩니다.',
+    '戊': '무토(戊土) · 큰 산처럼 듬직한 기운. 맡은 일을 끝까지 지키는 신뢰가 무기예요. 변화 앞에서 느려질 수 있으니 작은 시도부터 움직여 보세요.',
+    '己': '기토(己土) · 밭흙처럼 알차게 키우는 기운. 꼼꼼하고 현실적인 판단으로 주변을 챙겨요. 걱정이 많아지는 날엔 할 일을 종이에 적어 내려놓으면 편해집니다.',
+    '庚': '경금(庚金) · 바위와 칼처럼 단단한 기운. 결단이 빠르고 옳고 그름이 분명해요. 밀어붙이면 상처가 남으니 말의 각도를 조금만 둥글게 하면 좋습니다.',
+    '辛': '신금(辛金) · 보석처럼 맑고 예민한 기운. 미세한 차이를 알아채는 감각과 세련된 취향이 강점이에요. 자존심이 상하면 마음을 닫기 쉬우니 솔직하게 표현해 보세요.',
+    '壬': '임수(壬水) · 바다처럼 넓게 흐르는 기운. 큰 그림을 보는 지혜와 포용력이 있어요. 생각이 많아 결정이 늦어질 수 있으니 마감을 스스로 정해 두면 좋습니다.',
+    '癸': '계수(癸水) · 비와 이슬처럼 스며드는 기운. 감수성이 좋고 아이디어가 샘처럼 올라와요. 기분의 기복이 크니 규칙적인 생활이 힘을 지켜 줍니다.'
+  };
+
+  var SAJU_RELATIONS = {
+    bi: ['비화 (같은 기운)', '같은 기운이 겹치는 날이에요. 내 힘으로 밀고 나가기 좋지만 고집이 세지기 쉬우니 한 번 더 들어보세요.'],
+    saengMe: ['상생 (나를 도와주는 기운)', '오늘의 기운이 내 일간을 북돋아 주는 흐름이에요. 도움을 청하거나 미뤄둔 일을 꺼내기 좋습니다.'],
+    saeng: ['설기 (내가 내보내는 기운)', '내 기운이 밖으로 나가는 날이라 표현·창작·베풂에 잘 맞아요. 대신 기운을 많이 쓰니 무리하지 마세요.'],
+    geuk: ['아극 (내가 다루는 기운)', '오늘의 기운을 내가 다루는 날입니다. 돈과 성과를 움직이기 좋지만 남을 밀어붙이면 역효과예요.'],
+    geukMe: ['극아 (나를 누르는 기운)', '오늘의 기운이 나를 누르는 날이라 일정이 빡빡하게 느껴질 수 있어요. 큰 결정은 미루고 정비에 쓰세요.']
+  };
+
+  /* 그레고리력 날짜 → 율리우스 적일 번호(정오 기준) */
+  function jdnDay(y, m, d) {
+    var a = Math.floor((14 - m) / 12);
+    var yy = y + 4800 - a;
+    var mm = m + 12 * a - 3;
+    return d + Math.floor((153 * mm + 2) / 5) + 365 * yy +
+      Math.floor(yy / 4) - Math.floor(yy / 100) + Math.floor(yy / 400) - 32045;
+  }
+
+  /* 한국 표준시(UTC+9) 날짜·시각 → 율리우스 적일(UT 기준) */
+  function jdFromKst(y, m, d, hour) {
+    var h = (hour == null || !isFinite(hour)) ? 12 : hour;
+    return jdnDay(y, m, d) - 0.5 + (h - 9) / 24;
+  }
+
+  /* 율리우스 적일 → 한국 표준시 달력 값 */
+  function jdKstParts(jd) {
+    var v = jd + 9 / 24 + 0.5;
+    var z = Math.floor(v);
+    var frac = v - z;
+    var a = z;
+    if (z >= 2299161) {
+      var alpha = Math.floor((z - 1867216.25) / 36524.25);
+      a = z + 1 + alpha - Math.floor(alpha / 4);
+    }
+    var b = a + 1524;
+    var c = Math.floor((b - 122.1) / 365.25);
+    var d0 = Math.floor(365.25 * c);
+    var e = Math.floor((b - d0) / 30.6001);
+    var dayF = b - d0 - Math.floor(30.6001 * e) + frac;
+    var day = Math.floor(dayF);
+    var month = e < 14 ? e - 1 : e - 13;
+    var year = month > 2 ? c - 4716 : c - 4715;
+    var hours = (dayF - day) * 24;
+    var h = Math.floor(hours);
+    var mi = Math.floor((hours - h) * 60);
+    return { year: year, month: month, day: day, hour: h, minute: mi };
+  }
+
+  /* 태양의 겉보기 황경(도). Meeus, Astronomical Algorithms 25장의 저정밀식 */
+  function sunLongitude(jd) {
+    var t = (jd - 2451545) / 36525;
+    var l0 = 280.46646 + 36000.76983 * t + 0.0003032 * t * t;
+    var m = 357.52911 + 35999.05029 * t - 0.0001537 * t * t;
+    var mr = m * Math.PI / 180;
+    var c = (1.914602 - 0.004817 * t - 0.000014 * t * t) * Math.sin(mr) +
+      (0.019993 - 0.000101 * t) * Math.sin(2 * mr) +
+      0.000289 * Math.sin(3 * mr);
+    var omega = (125.04 - 1934.136 * t) * Math.PI / 180;
+    var lambda = l0 + c - 0.00569 - 0.00478 * Math.sin(omega);
+    return ((lambda % 360) + 360) % 360;
+  }
+
+  /* 태양 황경이 lon(도)이 되는 순간의 율리우스 적일 */
+  function solarTermJd(year, lon) {
+    var doy = ((79 + lon / 0.985647) % 365.2422 + 365.2422) % 365.2422;
+    var jd = jdnDay(year, 1, 1) - 0.5 + doy;
+    for (var i = 0; i < 10; i++) {
+      var diff = (((lon - sunLongitude(jd) + 180) % 360) + 360) % 360 - 180;
+      jd += diff / 0.985647;
+      if (Math.abs(diff) < 1e-8) break;
+    }
+    return jd;
+  }
+
+  /* 태어난 순간이 속한 절기와 그 절기의 사주 연도 */
+  function sajuMonthTerm(birthJd) {
+    var parts = jdKstParts(birthJd);
+    var list = [];
+    [parts.year - 1, parts.year, parts.year + 1].forEach(function (y) {
+      SAJU_TERMS.forEach(function (term) {
+        list.push({
+          order: term.order,
+          name: term.name,
+          lon: term.lon,
+          /* 소한(285°)은 1월에 오므로 사주 해는 앞 해 */
+          year: term.lon === 285 ? y - 1 : y,
+          jd: solarTermJd(y, term.lon)
+        });
+      });
+    });
+    list.sort(function (a, b) { return a.jd - b.jd; });
+
+    var idx = 0;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].jd <= birthJd) idx = i;
+      else break;
+    }
+    return { current: list[idx], next: list[idx + 1] || null };
+  }
+
+  /* 1949-10-01 = 갑자일. 그날이 0 이 되도록 49 를 더한다 */
+  function sajuDayIndex(y, m, d) {
+    return ((jdnDay(y, m, d) + 49) % 60 + 60) % 60;
+  }
+
+  function sajuPillars(input) {
+    var hourIdx = input.hourIdx;
+    var birthJd = jdFromKst(input.year, input.month, input.day,
+      hourIdx == null ? 12 : (hourIdx === 0 ? 0 : hourIdx * 2));
+    var ctx = sajuMonthTerm(birthJd);
+    var yearNum = ctx.current.year;
+
+    var yStem = ((yearNum - 4) % 10 + 10) % 10;
+    var yBranch = ((yearNum - 4) % 12 + 12) % 12;
+
+    /* 월두법(五虎遁): 인월의 천간은 연간이 정하고, 다음 달부터 한 칸씩 */
+    var order = ctx.current.order;
+    var mStem = (yStem * 2 + 2 + order) % 10;
+    var mBranch = (order + 2) % 12;
+
+    var dIdx = sajuDayIndex(input.year, input.month, input.day);
+    var dStem = dIdx % 10;
+    var dBranch = dIdx % 12;
+
+    var hour = null;
+    if (hourIdx != null) {
+      var hBranch = hourIdx % 12;
+      /* 시두법(五鼠遁): 자시의 천간은 일간이 정한다 */
+      hour = { stem: (dStem * 2 + hBranch) % 10, branch: hBranch };
+    }
+
+    return {
+      birthJd: birthJd,
+      yearNum: yearNum,
+      term: ctx.current,
+      nextTerm: ctx.next,
+      year: { stem: yStem, branch: yBranch },
+      month: { stem: mStem, branch: mBranch },
+      day: { stem: dStem, branch: dBranch },
+      hour: hour
+    };
+  }
+
+  function sajuPillarText(pillar) {
+    if (!pillar) return '모름';
+    return SAJU_STEMS[pillar.stem] + SAJU_BRANCHES[pillar.branch];
+  }
+
+  function sajuPillarKo(pillar) {
+    if (!pillar) return '모름';
+    return SAJU_STEM_KO[pillar.stem] + SAJU_BRANCH_KO[pillar.branch];
+  }
+
+  function sajuCountElements(pillars) {
+    var counts = { '목': 0, '화': 0, '토': 0, '금': 0, '수': 0, total: 0 };
+    ['year', 'month', 'day', 'hour'].forEach(function (key) {
+      var p = pillars[key];
+      if (!p) return;
+      counts[SAJU_STEM_EL[p.stem]] += 1;
+      counts[SAJU_BRANCH_EL[p.branch]] += 1;
+      counts.total += 2;
+    });
+    return counts;
+  }
+
+  /* 오행 사이의 관계: 같은 기운 · 상생 · 상극 */
+  function sajuRelation(meEl, otherEl) {
+    var a = SAJU_ELEMENTS.indexOf(meEl);
+    var b = SAJU_ELEMENTS.indexOf(otherEl);
+    if (a < 0 || b < 0) return 'unknown';
+    if (a === b) return 'bi';
+    if ((a + 1) % 5 === b) return 'saeng';
+    if ((b + 1) % 5 === a) return 'saengMe';
+    if ((a + 2) % 5 === b) return 'geuk';
+    if ((b + 2) % 5 === a) return 'geukMe';
+    return 'unknown';
+  }
+
+  function sajuTodayPillar(date) {
+    var d = date || new Date();
+    var idx = sajuDayIndex(d.getFullYear(), d.getMonth() + 1, d.getDate());
+    return { stem: idx % 10, branch: idx % 12, index: idx };
+  }
+
+  var sajuEls = {
+    birth: $('#saju-birth'),
+    calendar: $('#saju-calendar'),
+    hour: $('#saju-hour'),
+    gender: $('#saju-gender'),
+    hint: $('#saju-hint'),
+    note: $('#saju-note'),
+    result: $('#saju-result'),
+    empty: $('#saju-empty'),
+    who: $('#saju-who'),
+    daymaster: $('#saju-daymaster'),
+    summary: $('#saju-summary'),
+    grid: $('#saju-grid'),
+    elements: $('#saju-elements'),
+    elementNote: $('#saju-element-note'),
+    personality: $('#saju-personality'),
+    today: $('#saju-today'),
+    copy: $('#saju-copy')
+  };
+
+  var SAJU_HINT_SOLAR = '양력 생일을 넣어 주세요. 해는 입춘, 달은 12절기(절입 시각)에 바뀝니다. 태어난 시간을 모르면 시주를 빼고 여섯 글자로 계산합니다.';
+  var SAJU_HINT_LUNAR = '음력 생일은 아직 자동으로 양력으로 바꾸지 못해요. 네이버·다음 만세력에서 양력 날짜를 확인해 넣어 주세요. (지금 입력한 날짜는 양력으로 계산합니다)';
+
+  var currentSaju = null;
+
+  function sajuCopyLines(s) {
+    return [
+      '🏮 사주·만세력 — ' + s.who,
+      '',
+      '년주 ' + s.texts.year + ' · 월주 ' + s.texts.month,
+      '일주 ' + s.texts.day + ' · 시주 ' + s.texts.hour,
+      '',
+      '일간 ' + s.texts.dayMaster,
+      '오행 ' + s.texts.elements,
+      '',
+      '일간 성격: ' + s.personality,
+      '',
+      '오늘의 기운: ' + s.todayText,
+      '',
+      '참고·재미용 풀이이며 의료·법률·투자 조언이 아닙니다.',
+      '일상계산소 · https://' + location.host + '/#saju'
+    ].join('\n');
+  }
+
+  function renderSaju(opts) {
+    opts = opts || {};
+    if (!sajuEls.birth || !sajuEls.result) return;
+
+    var lunar = !!(sajuEls.calendar && sajuEls.calendar.value === 'lunar');
+    if (sajuEls.hint) sajuEls.hint.textContent = lunar ? SAJU_HINT_LUNAR : SAJU_HINT_SOLAR;
+
+    var raw = String(sajuEls.birth.value || '');
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    var okDate = false;
+    var y = 0, mo = 0, da = 0;
+    if (m) {
+      y = Number(m[1]); mo = Number(m[2]); da = Number(m[3]);
+      var probe = new Date(y, mo - 1, da);
+      okDate = y >= 1900 && y <= 2030 && mo >= 1 && mo <= 12 && da >= 1 &&
+        probe.getFullYear() === y && probe.getMonth() === mo - 1 && probe.getDate() === da;
+    }
+    if (!okDate) {
+      sajuEls.result.hidden = true;
+      if (sajuEls.empty) sajuEls.empty.hidden = false;
+      currentSaju = null;
+      return;
+    }
+
+    var hourRaw = sajuEls.hour ? String(sajuEls.hour.value) : '';
+    var hourIdx = hourRaw === '' ? null : Number(hourRaw);
+    if (hourIdx != null && !(hourIdx >= 0 && hourIdx <= 11)) hourIdx = null;
+    var gender = sajuEls.gender ? String(sajuEls.gender.value) : '';
+
+    var p = sajuPillars({ year: y, month: mo, day: da, hourIdx: hourIdx });
+    var counts = sajuCountElements(p);
+    var dayStem = p.day.stem;
+    var meEl = SAJU_STEM_EL[dayStem];
+    var today = sajuTodayPillar(new Date());
+    var todayEl = SAJU_STEM_EL[today.stem];
+    var relKey = sajuRelation(meEl, todayEl);
+    var rel = SAJU_RELATIONS[relKey] || SAJU_RELATIONS.bi;
+
+    var whoParts = [y + '년 ' + mo + '월 ' + da + '일 ' + (lunar ? '음력(양력 기준)' : '양력')];
+    whoParts.push(hourIdx == null ? '시간 모름' : SAJU_BRANCH_KO[hourIdx] + '시');
+    if (gender === 'm') whoParts.push('남성');
+    if (gender === 'f') whoParts.push('여성');
+
+    var texts = {
+      year: sajuPillarText(p.year),
+      month: sajuPillarText(p.month),
+      day: sajuPillarText(p.day),
+      hour: sajuPillarText(p.hour),
+      dayMaster: SAJU_STEMS[dayStem] + '(' + SAJU_STEM_KO[dayStem] + ') · ' + meEl,
+      elements: SAJU_ELEMENTS.map(function (el) { return el + ' ' + counts[el]; }).join(' · ')
+    };
+
+    if (sajuEls.result) sajuEls.result.hidden = false;
+    if (sajuEls.empty) sajuEls.empty.hidden = true;
+    if (sajuEls.who) sajuEls.who.textContent = whoParts.join(' · ');
+    if (sajuEls.daymaster) sajuEls.daymaster.textContent = '일간 ' + SAJU_STEMS[dayStem] + ' ' + meEl;
+    if (sajuEls.summary) {
+      sajuEls.summary.textContent = p.yearNum + '년 ' + sajuPillarKo(p.year) + '년 · ' +
+        sajuPillarKo(p.month) + '월 · ' + sajuPillarKo(p.day) + '일' +
+        (p.hour ? ' · ' + sajuPillarKo(p.hour) + '시' : '');
+    }
+
+    var cols = [
+      { head: '년주', pillar: p.year, day: false },
+      { head: '월주', pillar: p.month, day: false },
+      { head: '일주', pillar: p.day, day: true },
+      { head: '시주', pillar: p.hour, day: false }
+    ];
+    if (sajuEls.grid) {
+      sajuEls.grid.innerHTML = cols.map(function (c) {
+        if (!c.pillar) {
+          return '<li class="saju-col">' +
+            '<span class="saju-col-head">' + c.head + '</span>' +
+            '<span class="saju-unknown">?</span>' +
+            '<span class="saju-el">모름</span>' +
+            '</li>';
+        }
+        var stemEl = SAJU_STEM_EL[c.pillar.stem];
+        var branchEl = SAJU_BRANCH_EL[c.pillar.branch];
+        return '<li class="saju-col' + (c.day ? ' is-day' : '') + '">' +
+          '<span class="saju-col-head">' + c.head + '</span>' +
+          '<span class="saju-char ' + SAJU_EL_CLASS[stemEl] + '">' + SAJU_STEMS[c.pillar.stem] + '</span>' +
+          '<span class="saju-char ' + SAJU_EL_CLASS[branchEl] + '">' + SAJU_BRANCHES[c.pillar.branch] + '</span>' +
+          '<span class="saju-el">' + stemEl + '·' + branchEl + '</span>' +
+          '</li>';
+      }).join('');
+    }
+
+    if (sajuEls.elements) {
+      sajuEls.elements.innerHTML = SAJU_ELEMENTS.map(function (el) {
+        var n = counts[el];
+        var pct = counts.total ? Math.round(n / counts.total * 100) : 0;
+        return '<li>' +
+          '<div class="bar-top">' +
+          '<span class="bar-name ' + SAJU_EL_CLASS[el] + '">' + el + '</span>' +
+          '<span class="bar-score">' + n + '개</span>' +
+          '</div>' +
+          '<div class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></div>' +
+          '</li>';
+      }).join('');
+    }
+
+    var sorted = SAJU_ELEMENTS.slice().sort(function (a, b) {
+      if (counts[b] !== counts[a]) return counts[b] - counts[a];
+      return SAJU_ELEMENTS.indexOf(a) - SAJU_ELEMENTS.indexOf(b);
+    });
+    var topEl = sorted[0];
+    var lowEl = sorted[sorted.length - 1];
+    var elementNote = counts.total + '글자 중 ' + texts.elements + '. ';
+    elementNote += (counts[topEl] === counts[lowEl])
+      ? '다섯 기운이 고르게 섞여 있어요.'
+      : topEl + ' 기운이 ' + counts[topEl] + '개로 가장 많고 ' + lowEl + ' 기운이 ' + counts[lowEl] + '개로 가장 적어요.';
+    if (sajuEls.elementNote) sajuEls.elementNote.textContent = elementNote;
+
+    var personality = SAJU_STEM_TRAIT[SAJU_STEMS[dayStem]] || '';
+    if (sajuEls.personality) sajuEls.personality.textContent = personality;
+
+    var todayText = '오늘은 ' + sajuPillarText(today) + '일(' + todayEl + ' 기운), 내 일간은 ' +
+      SAJU_STEMS[dayStem] + '(' + meEl + ') — ' + rel[0] + '. ' + rel[1];
+    if (sajuEls.today) sajuEls.today.textContent = todayText;
+
+    var notes = [];
+    if (lunar) notes.push('음력 날짜는 아직 변환하지 못해 입력한 날짜를 양력으로 보고 계산했어요.');
+    if (hourIdx === 0) notes.push('자시(23:00~01:00) 출생은 유파에 따라 일주가 다음 날로 바뀔 수 있어요.');
+    if (p.term && Math.abs(p.birthJd - p.term.jd) < 0.03) {
+      notes.push('절입(' + p.term.name + ') 시각과 가까워 만세력에 따라 월주가 달라질 수 있어요.');
+    } else if (p.nextTerm && Math.abs(p.nextTerm.jd - p.birthJd) < 0.03) {
+      notes.push('절입(' + p.nextTerm.name + ') 시각과 가까워 만세력에 따라 월주가 달라질 수 있어요.');
+    }
+    if (sajuEls.note) sajuEls.note.textContent = notes.join(' ');
+
+    currentSaju = {
+      who: whoParts.join(' · '),
+      texts: texts,
+      personality: personality,
+      todayText: todayText,
+      elementNote: elementNote
+    };
+
+    setCopyText('saju', sajuCopyLines(currentSaju));
+    if (!opts.silent) {
+      queueHistory('saju', sajuPillarKo(p.year) + '년·' + sajuPillarKo(p.month) + '월·' + sajuPillarKo(p.day) + '일');
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
   /* 개인정보처리방침 모달                                                */
   /* ------------------------------------------------------------------ */
   function attachPrivacy() {
@@ -1831,6 +2452,7 @@
     attachPrivacy();
     attachCopy();
     attachSubscribe();
+    attachAuth();
 
     /* 최근 계산 기록: 저장된 요약만 먼저 그린다 */
     historyItems = readStore();
@@ -1885,6 +2507,14 @@
     fortuneEls.zodiac.addEventListener('change', renderFortune);
     fortuneEls.copy.addEventListener('click', copyFortune);
 
+    /* 사주·만세력 */
+    ['input', 'change'].forEach(function (evt) {
+      if (sajuEls.birth) sajuEls.birth.addEventListener(evt, function () { renderSaju(); });
+      if (sajuEls.calendar) sajuEls.calendar.addEventListener(evt, function () { renderSaju(); });
+      if (sajuEls.hour) sajuEls.hour.addEventListener(evt, function () { renderSaju(); });
+      if (sajuEls.gender) sajuEls.gender.addEventListener(evt, function () { renderSaju(); });
+    });
+
     /* 퀴즈 */
     attachQuiz();
 
@@ -1895,6 +2525,7 @@
     updateLoan();
     setPercentMode('p1');
     switchQuiz('spend');
+    renderSaju({ silent: true });
 
     /* 해시 라우팅 */
     var hash = (location.hash || '').replace('#', '');

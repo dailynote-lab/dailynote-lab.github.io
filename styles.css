@@ -1,5 +1,5 @@
 /* ==========================================================================
-   데일리툴 — 생활 계산기 · 오늘의 운세
+   일상계산소 — 생활 계산기 · 오늘의 운세
    Mobile-first, no external assets, single stylesheet.
    ========================================================================== */
 
@@ -111,6 +111,12 @@ body[data-section="fun"] {
     --grp-line: #4d2f40;
     --grp-ink: #ffd8e8;
   }
+
+  .el-mok { color: #63c97a; }
+  .el-hwa { color: #ff8072; }
+  .el-to { color: #d9a45c; }
+  .el-geum { color: #b6bdc9; }
+  .el-su { color: #6aa8f0; }
 }
 
 /* ---------- base ---------- */
@@ -248,6 +254,67 @@ a { color: var(--brand); }
 .header-jump:hover { border-color: var(--brand); }
 
 .header-jump-arrow { font-size: 11px; opacity: .7; }
+
+/* ---------- 헤더 로그인 버튼 ---------- */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.header-auth {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 7px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: color .16s ease, border-color .16s ease, background .16s ease;
+}
+
+.header-auth:hover {
+  color: var(--brand-deep);
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.header-auth-icon { font-size: 12px; line-height: 1; }
+
+.header-auth-short { display: none; }
+
+/* ---------- 로그인 안내(사주·기록 안쪽) ---------- */
+.login-hint {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--line);
+  font-size: 12px;
+  line-height: 1.6;
+  font-weight: 600;
+  color: var(--text-3);
+}
+
+.login-hint-btn {
+  appearance: none;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--brand-deep);
+  font-size: 12px;
+  font-weight: 850;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
 
 /* ---------- 도구 목록 (directory) ---------- */
 .directory {
@@ -764,6 +831,10 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   letter-spacing: -0.005em;
 }
 
+.hint:empty { display: none; }
+
+.saju-grid + .hint { margin-top: 9px; }
+
 /* ---------- result ---------- */
 .result {
   margin-top: 22px;
@@ -1085,6 +1156,143 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   font-variant-numeric: tabular-nums;
   font-weight: 800;
   font-size: 12px;
+}
+
+/* ---------- 사주 명식 ---------- */
+.saju-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+  margin-top: 16px;
+}
+
+.saju-grid.saju-grid-3 { grid-template-columns: repeat(3, 1fr); }
+
+.saju-col {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 11px 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.saju-col.is-day {
+  border-color: var(--brand-line);
+  background: var(--brand-soft);
+}
+
+.saju-col-head {
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  color: var(--text-3);
+}
+
+.saju-col.is-day .saju-col-head { color: var(--brand-deep); }
+
+.saju-char {
+  font-size: 25px;
+  font-weight: 850;
+  line-height: 1.15;
+  letter-spacing: 0;
+}
+
+.saju-el {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-3);
+}
+
+.saju-unknown {
+  font-size: 19px;
+  font-weight: 800;
+  color: var(--text-3);
+  line-height: 1.15;
+}
+
+.el-mok { color: #2b8a3e; }
+.el-hwa { color: #d6402f; }
+.el-to { color: #a1661a; }
+.el-geum { color: #6b7280; }
+.el-su { color: #1c6fc4; }
+
+/* ---------- 로그인 모달 ---------- */
+.auth-modal {
+  width: min(480px, calc(100% - 24px));
+}
+
+.auth-status {
+  margin-top: 14px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.65;
+  color: var(--brand-deep);
+}
+
+.auth-form { display: grid; gap: 12px; margin-top: 14px; }
+
+.auth-form .field { margin-bottom: 0; }
+
+.auth-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.auth-actions .btn { margin-top: 0; }
+
+.auth-message {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.6;
+  color: var(--text-2);
+}
+
+.auth-message:empty { display: none; }
+
+.auth-message[data-state="warn"] { color: var(--down); }
+
+.auth-signout {
+  appearance: none;
+  justify-self: start;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.auth-signout:hover { color: var(--down); border-color: var(--down); }
+
+.auth-points {
+  display: grid;
+  gap: 6px;
+  margin-top: 16px;
+}
+
+.auth-points li {
+  position: relative;
+  padding-left: 12px;
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: var(--text-2);
+}
+
+.auth-points li::before {
+  content: "";
+  position: absolute;
+  left: 1px;
+  top: 8.5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--brand);
+  opacity: .5;
 }
 
 /* ---------- buttons ---------- */
@@ -1746,8 +1954,14 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .policy-body .policy-sec:first-of-type { margin-top: 14px; }
 
 /* ---------- small screens ---------- */
+@media (max-width: 430px) {
+  .header-auth-label { display: none; }
+  .header-auth-short { display: inline; }
+}
+
 @media (max-width: 380px) {
   .brand-sub { display: none; }
+  .header-jump { display: none; }
   .card { padding: 18px 15px 20px; }
   .field-row { gap: 8px; }
   .stat-value { font-size: 14px; }
@@ -1755,6 +1969,7 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
   .dir-title { font-size: 19px; }
   .tool-name { font-size: 14px; }
   .tool-flag { display: none !important; }
+  .saju-char { font-size: 21px; }
 }
 
 @media (min-width: 640px) {
