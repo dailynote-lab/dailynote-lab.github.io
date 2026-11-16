@@ -103,16 +103,271 @@
   }
 
   /* ------------------------------------------------------------------ */
+  /* 결과 복사 · 최근 계산 기록(로컬) · 구독                              */
+  /* ------------------------------------------------------------------ */
+  /* 복사할 결과 문구는 각 계산기가 계산 끝에 setCopyText() 로 넣어 둔다 */
+  var COPY_TEXT = {};
+
+  function setCopyText(tool, text) { COPY_TEXT[tool] = text || ''; }
+
+  function flashButton(btn, label) {
+    if (!btn) return;
+    if (!btn.getAttribute('data-label')) {
+      btn.setAttribute('data-label', btn.textContent);
+    }
+    btn.textContent = label;
+    setTimeout(function () {
+      btn.textContent = btn.getAttribute('data-label');
+    }, 1600);
+  }
+
+  function copyText(text, btn) {
+    if (!text) return;
+
+    function done() { flashButton(btn, '복사했어요 ✓'); }
+
+    function legacy() {
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      try {
+        ta.select();
+        document.execCommand('copy');
+        done();
+      } catch (e) { /* noop */ }
+      document.body.removeChild(ta);
+    }
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        navigator.clipboard.writeText(text).then(done, legacy);
+        return;
+      } catch (e) { /* fallback */ }
+    }
+    legacy();
+  }
+
+  function attachCopy() {
+    $$('[data-copy]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        copyText(COPY_TEXT[btn.dataset.copy], btn);
+      });
+    });
+  }
+
+  /* 저장 내용: 도구 이름 · 결과 요약 · 시각. 입력값은 저장하지 않는다. */
+  var HISTORY_KEY = 'daily-tool:history:v1';
+  var HISTORY_MAX = 8;
+  var historySection = $('#history');
+  var historyList = $('#history-list');
+  var historyClear = $('#history-clear');
+  var historyItems = [];
+  var historyTimer = null;
+  var historyPending = {};
+  var historyCleared = false;
+
+  function readStore() {
+    try {
+      var raw = window.localStorage.getItem(HISTORY_KEY);
+      if (!raw) return [];
+      var parsed = JSON.parse(raw);
+      return Object.prototype.toString.call(parsed) === '[object Array]' ? parsed : [];
+    } catch (e) { return []; }
+  }
+
+  function writeStore(list) {
+    try { window.localStorage.setItem(HISTORY_KEY, JSON.stringify(list)); } catch (e) { /* 저장소 차단 환경 */ }
+  }
+
+  function whenLabel(ts) {
+    var diff = Date.now() - ts;
+    if (!isFinite(diff) || diff < 0) return '';
+    if (diff < 60000) return '방금';
+    if (diff < 3600000) return Math.floor(diff / 60000) + '분 전';
+    if (diff < 86400000) return Math.floor(diff / 3600000) + '시간 전';
+    var d = new Date(ts);
+    return (d.getMonth() + 1) + '/' + d.getDate();
+  }
+
+  function renderHistory() {
+    if (!historySection || !historyList) return;
+
+    if (!historyItems.length) {
+      historyList.innerHTML = historyCleared
+        ? '<li class="history-empty">기록을 모두 지웠어요. 새로 계산하면 다시 쌓입니다.</li>'
+        : '';
+      historySection.hidden = !historyCleared;
+      return;
+    }
+
+    historyCleared = false;
+    historySection.hidden = false;
+    historyList.innerHTML = historyItems.map(function (r) {
+      var meta = TOOL_META[r.tool];
+      var name = meta ? meta.title : r.tool;
+      return '<li>' +
+        '<button type="button" class="history-item" data-tool="' + r.tool + '">' +
+        '<span class="history-name">' + name + '</span>' +
+        '<span class="history-value">' + r.summary + '</span>' +
+        '<span class="history-when">' + whenLabel(r.at) + '</span>' +
+        '</button>' +
+        '</li>';
+    }).join('');
+  }
+
+  function flushHistory() {
+    historyTimer = null;
+    var changed = false;
+
+    Object.keys(historyPending).forEach(function (tool) {
+      var summary = historyPending[tool];
+      historyItems = historyItems.filter(function (r) { return r.tool !== tool; });
+      historyItems.unshift({ tool: tool, summary: summary, at: Date.now() });
+      changed = true;
+    });
+    historyPending = {};
+
+    if (!changed) return;
+    if (historyItems.length > HISTORY_MAX) historyItems = historyItems.slice(0, HISTORY_MAX);
+    historyCleared = false;
+    writeStore(historyItems);
+    renderHistory();
+  }
+
+  /* 입력할 때마다 쌓지 않도록 잠깐 모았다가 한 번에 기록한다 */
+  function queueHistory(tool, summary) {
+    if (!tool || !summary) return;
+    historyPending[tool] = summary;
+    if (historyTimer) clearTimeout(historyTimer);
+    historyTimer = setTimeout(flushHistory, 800);
+  }
+
+  function attachHistory() {
+    if (historyClear) {
+      historyClear.addEventListener('click', function () {
+        historyItems = [];
+        historyPending = {};
+        if (historyTimer) { clearTimeout(historyTimer); historyTimer = null; }
+        try { window.localStorage.removeItem(HISTORY_KEY); } catch (e) { /* noop */ }
+        historyCleared = true;
+        renderHistory();
+      });
+    }
+
+    if (historyList) {
+      historyList.addEventListener('click', function (e) {
+        var item = e.target && e.target.closest ? e.target.closest('.history-item') : null;
+        if (!item) return;
+        setTool(item.dataset.tool, { scroll: true, focus: true });
+      });
+    }
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 소식 받아보기(옵트인 구독)                                          */
+  /* ------------------------------------------------------------------ */
+  /* 백엔드가 준비되면 endpoint 에 주소를 넣으면 된다.
+     예) Google Apps Script 웹앱 'https://script.google.com/macros/s/…/exec'
+         Supabase Edge Function 'https://<project>.supabase.co/functions/v1/subscribe'
+     비어 있으면 어떤 요청도 보내지 않고 정직하게 안내만 한다. */
+  var NEWSLETTER = {
+    endpoint: '',
+    formName: 'dailytool-newsletter'
+  };
+
+  var CONSENT_TEXT = '개인정보 수집·이용 및 정보 수신에 동의합니다 (이메일, 목적: 뉴스레터 발송, 언제든 철회 가능)';
+
+  function isEmail(v) {
+    return /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(String(v == null ? '' : v).trim());
+  }
+
+  function subscribeMessage(text, state) {
+    var el = $('#subscribe-status');
+    if (!el) return;
+    el.textContent = text;
+    if (state) el.setAttribute('data-state', state);
+    else el.removeAttribute('data-state');
+  }
+
+  function attachSubscribe() {
+    var form = $('#subscribe-form');
+    var btn = $('#subscribe-submit');
+    var emailEl = $('#subscribe-email');
+    var consentEl = $('#subscribe-consent');
+    if (!form || !btn || !emailEl || !consentEl) return;
+
+    function submit() {
+      var email = String(emailEl.value == null ? '' : emailEl.value).trim();
+
+      if (!isEmail(email)) {
+        subscribeMessage('이메일 주소를 다시 확인해 주세요. 예: name@example.com', 'warn');
+        return;
+      }
+      if (!consentEl.checked) {
+        subscribeMessage('아래 동의 항목에 체크해야 신청할 수 있어요. 동의하지 않아도 계산기는 그대로 쓸 수 있습니다.', 'warn');
+        return;
+      }
+
+      /* 아직 서버가 연결되지 않은 상태: 성공한 척하지 않는다 */
+      if (!NEWSLETTER.endpoint) {
+        subscribeMessage('현재 베타 준비 중이에요 — 오픈 알림/구독 연결 전까지 신청 내용을 저장하지 않습니다. 그동안 새 소식은 데일리노트 블로그(daily-not.tistory.com)에서 먼저 확인해 보세요!', 'note');
+        return;
+      }
+
+      if (typeof fetch !== 'function') {
+        subscribeMessage('이 브라우저에서는 신청을 보낼 수 없어요. 데일리노트 블로그로 알려 주세요.', 'warn');
+        return;
+      }
+
+      btn.disabled = true;
+      subscribeMessage('신청을 보내는 중이에요…', 'note');
+
+      fetch(NEWSLETTER.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: email,
+          consent: true,
+          consentText: CONSENT_TEXT,
+          source: NEWSLETTER.formName,
+          at: new Date().toISOString()
+        })
+      }).then(function (res) {
+        if (!res || !res.ok) throw new Error('HTTP ' + (res ? res.status : '?'));
+        subscribeMessage('신청이 접수됐어요. 새 소식이 나오면 보내드릴게요. (언제든 철회 가능)', 'note');
+        emailEl.value = '';
+        consentEl.checked = false;
+      }).catch(function () {
+        subscribeMessage('신청을 보내지 못했어요. 잠시 뒤 다시 시도하거나 데일리노트 블로그로 알려 주세요.', 'warn');
+      }).then(function () {
+        btn.disabled = false;
+      });
+    }
+
+    btn.addEventListener('click', submit);
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      submit();
+    });
+  }
+
+  /* ------------------------------------------------------------------ */
   /* 탭 / 라우팅                                                          */
   /* ------------------------------------------------------------------ */
   var TOOL_SECTION = {
-    salary: 'calc', loan: 'calc', percent: 'calc',
+    salary: 'calc', severance: 'calc', weekly: 'calc',
+    loan: 'calc', percent: 'calc',
     fortune: 'fun', quiz: 'fun'
   };
 
   /* 도구 목록 카드에 보이는 이름과 안내 문구 — 카드·제목·스크롤 대상이 함께 쓴다 */
   var TOOL_META = {
     salary: { title: '연봉 실수령액', group: '생활·재테크 계산기' },
+    severance: { title: '퇴직금', group: '생활·재테크 계산기' },
+    weekly: { title: '주휴수당', group: '생활·재테크 계산기' },
     loan: { title: '전세·대출 이자', group: '생활·재테크 계산기' },
     percent: { title: '할인·퍼센트', group: '생활·재테크 계산기' },
     fortune: { title: '오늘의 운세', group: '오늘의 운세·심리테스트' },
@@ -121,7 +376,8 @@
 
   var panels = { calc: $('#panel-calc'), fun: $('#panel-fun') };
   var tools = {
-    salary: $('#tool-salary'), loan: $('#tool-loan'), percent: $('#tool-percent'),
+    salary: $('#tool-salary'), severance: $('#tool-severance'), weekly: $('#tool-weekly'),
+    loan: $('#tool-loan'), percent: $('#tool-percent'),
     fortune: $('#tool-fortune'), quiz: $('#tool-quiz')
   };
   var toolCards = $$('.tool-card[data-tool]');
@@ -293,7 +549,7 @@
     deps: $('#salary-deps')
   };
 
-  function updateSalary() {
+  function updateSalary(user) {
     var annual = parseNum(salaryEls.annual.value) * 10000;
     var nonTaxMonth = clamp(parseNum(salaryEls.nonTax.value), 0, 10000000);
     var deps = clamp(parseNum(salaryEls.deps.value) || 1, 1, 6);
@@ -313,6 +569,7 @@
       ['bdNp', 'bdHi', 'bdLt', 'bdEi', 'bdIns', 'bdIt', 'bdLt2', 'bdTax'].forEach(function (k) {
         out[k].textContent = '—';
       });
+      setCopyText('salary', '');
       return;
     }
 
@@ -342,6 +599,17 @@
     out.bdIt.textContent = won(tax.incomeTax / 12);
     out.bdLt2.textContent = won(tax.localTax / 12);
     out.bdTax.textContent = won(tax.total / 12);
+
+    setCopyText('salary', [
+      '💰 연봉 실수령액 (예상) — 데일리툴',
+      '연봉 ' + fmt(annual / 10000) + '만원 · 부양가족 ' + deps + '명',
+      '월 실수령 ' + won(monthlyNet) + ' / 연 ' + won(annualNet),
+      '월 공제 ' + won(monthlyDeduct) + ' (4대보험 ' + won(ins.total) + ' · 세금 ' + won(tax.total / 12) + ')',
+      '실수령률 ' + fmt2((annualNet / annual) * 100) + '%',
+      'https://' + location.host + '/#salary'
+    ].join('\n'));
+
+    if (user) queueHistory('salary', '월 ' + won(monthlyNet));
   }
 
   /* ------------------------------------------------------------------ */
@@ -404,7 +672,7 @@
     };
   }
 
-  function updateLoan() {
+  function updateLoan(user) {
     var principal = parseNum(loanEls.amount.value) * 10000;
     var rawTerm = parseNum(loanEls.term.value);
     var months = Math.max(0, Math.round(loanEls.unit.value === 'year' ? rawTerm * 12 : rawTerm));
@@ -430,6 +698,7 @@
       countEl.textContent = '—';
       ratioEl.textContent = '—';
       schedEl.innerHTML = '<li><span>—</span><span>—</span></li>';
+      setCopyText('loan', '');
       return;
     }
 
@@ -478,10 +747,238 @@
     schedEl.innerHTML = rows.map(function (row) {
       return '<li><span>' + row[0] + '</span><span>' + row[1] + '</span></li>';
     }).join('');
+
+    var methodName = method === 'bullet' ? '만기일시상환'
+      : method === 'equal-principal' ? '원금균등상환' : '원리금균등상환';
+
+    setCopyText('loan', [
+      '🏦 전세·대출 이자 (예상) — 데일리툴',
+      shortKrw(principal) + ' · ' + months + '개월 · 연 ' + fmt2(ratePct) + '% · ' + methodName,
+      label.textContent + ' ' + hero.textContent,
+      '총 이자 ' + won(s.totalInterest) + ' / 총 상환액 ' + won(s.total),
+      note.textContent,
+      'https://' + location.host + '/#loan'
+    ].join('\n'));
+
+    if (user) queueHistory('loan', '월 ' + hero.textContent + ' · 총 이자 ' + won(s.totalInterest));
   }
 
   /* ------------------------------------------------------------------ */
-  /* 3) 퍼센트 · 할인율                                                   */
+  /* 3) 퇴직금                                                            */
+  /* ------------------------------------------------------------------ */
+  var sevEls = {
+    start: $('#sev-start'),
+    end: $('#sev-end'),
+    monthly: $('#sev-monthly'),
+    bonus: $('#sev-bonus'),
+    leave: $('#sev-leave')
+  };
+
+  function toDate(iso) {
+    if (!iso) return null;
+    var d = new Date(String(iso) + 'T00:00:00');
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function dayDiff(a, b) { return Math.round((b.getTime() - a.getTime()) / 86400000); }
+
+  /* 월 단위 날짜 이동 (1월 31일 − 1개월 = 12월 31일처럼 말일 보정) */
+  function addMonths(date, delta) {
+    var y = date.getFullYear();
+    var m = date.getMonth() + delta;
+    var last = new Date(y, m + 1, 0).getDate();
+    return new Date(y, m, Math.min(date.getDate(), last));
+  }
+
+  /* 퇴직금 = 1일 평균임금 × 30 × 재직일수 ÷ 365
+     1일 평균임금 = (최근 3개월 임금 총액) ÷ (그 기간의 총 일수) */
+  function severanceEstimate(o) {
+    var start = o.start;
+    var end = o.end;
+    if (!start || !end || end.getTime() < start.getTime()) {
+      return { ok: false, reason: 'date' };
+    }
+
+    var workDays = dayDiff(start, end) + 1;
+    var periodStart = addMonths(end, -3);
+    var periodEnd = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
+    var periodDays = dayDiff(periodStart, periodEnd) + 1;
+
+    var salary3 = Math.max(0, o.monthly) * 3;
+    var bonus = Math.max(0, o.bonus || 0);
+    var leave = Math.max(0, o.leave || 0);
+    var total = salary3 + bonus + leave;
+    var avgDaily = periodDays > 0 ? total / periodDays : 0;
+    var pay = avgDaily * 30 * workDays / 365;
+
+    return {
+      ok: true,
+      workDays: workDays,
+      periodDays: periodDays,
+      salary3: salary3,
+      bonus: bonus,
+      leave: leave,
+      total: total,
+      avgDaily: avgDaily,
+      pay: pay,
+      eligible: workDays >= 365
+    };
+  }
+
+  function updateSeverance(user) {
+    var start = toDate(sevEls.start.value);
+    var end = toDate(sevEls.end.value) || toDate(todayKey());
+    var monthly = parseNum(sevEls.monthly.value) * 10000;
+    var bonus = parseNum(sevEls.bonus.value);
+    var leave = parseNum(sevEls.leave.value);
+
+    var hero = $('#res-sev-pay');
+    var note = $('#res-sev-note');
+    var elAvg = $('#res-sev-avg');
+    var elDays = $('#res-sev-days');
+    var elTotal = $('#res-sev-total');
+    var elMDays = $('#res-sev-mdays');
+
+    function clearAll(msg) {
+      hero.textContent = '—';
+      note.textContent = msg;
+      [elAvg, elDays, elTotal, elMDays].forEach(function (el) { el.textContent = '—'; });
+      setCopyText('severance', '');
+    }
+
+    if (!start) { clearAll('입사일을 입력해 주세요.'); return; }
+    if (!monthly) { clearAll('최근 3개월 월 급여를 입력해 주세요.'); return; }
+
+    var r = severanceEstimate({ start: start, end: end, monthly: monthly, bonus: bonus, leave: leave });
+    if (!r.ok) { clearAll('퇴사일이 입사일보다 빠릅니다. 날짜를 확인해 주세요.'); return; }
+
+    hero.textContent = won(r.pay);
+    note.textContent = r.eligible
+      ? '재직 ' + fmt(r.workDays) + '일 · 1일 평균임금 ' + won(r.avgDaily)
+      : '재직 1년 미만 — 법정 퇴직금 지급 대상이 아닙니다. 참고값이에요.';
+
+    elAvg.textContent = won(r.avgDaily);
+    elDays.textContent = fmt(r.workDays) + '일';
+    elTotal.textContent = won(r.total);
+    elMDays.textContent = fmt(r.periodDays) + '일';
+
+    var bd = {
+      salary: $('#bd-sev-salary'), bonus: $('#bd-sev-bonus'), leave: $('#bd-sev-leave'),
+      total: $('#bd-sev-total'), mdays: $('#bd-sev-mdays'), avg: $('#bd-sev-avg'),
+      years: $('#bd-sev-years'), pay: $('#bd-sev-pay')
+    };
+    if (bd.salary) bd.salary.textContent = won(r.salary3);
+    if (bd.bonus) bd.bonus.textContent = won(r.bonus);
+    if (bd.leave) bd.leave.textContent = won(r.leave);
+    if (bd.total) bd.total.textContent = won(r.total);
+    if (bd.mdays) bd.mdays.textContent = fmt(r.periodDays) + '일';
+    if (bd.avg) bd.avg.textContent = won(r.avgDaily);
+    if (bd.years) bd.years.textContent = fmt2(r.workDays / 365) + '년분';
+    if (bd.pay) bd.pay.textContent = won(r.pay);
+
+    setCopyText('severance', [
+      '💼 예상 퇴직금 (세전) — 데일리툴',
+      '재직 ' + fmt(r.workDays) + '일 (' + fmt2(r.workDays / 365) + '년분) · 1일 평균임금 ' + won(r.avgDaily),
+      '예상 퇴직금 ' + won(r.pay),
+      '최근 3개월 임금 총액 ' + won(r.total) + ' ÷ ' + fmt(r.periodDays) + '일',
+      r.eligible ? '근로기준법 기준 예상치입니다.' : '재직 1년 미만이라 법정 퇴직금 대상이 아닙니다.',
+      'https://' + location.host + '/#severance'
+    ].join('\n'));
+
+    if (user) queueHistory('severance', won(r.pay) + ' (' + fmt2(r.workDays / 365) + '년)');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 4) 주휴수당                                                          */
+  /* ------------------------------------------------------------------ */
+  var WEEK_WEEKS_PER_MONTH = 4.345;   /* 365일 ÷ 12개월 ÷ 7일 */
+
+  var wkEls = {
+    hourly: $('#wk-hourly'),
+    hours: $('#wk-hours')
+  };
+
+  /* 주휴수당 = 시급 × 주휴 인정시간
+     40시간 이상 8시간 / 40시간 미만 주 소정근로시간 ÷ 5 (15시간 미만은 0) */
+  function weeklyEstimate(hourly, hours) {
+    var h = clamp(hours, 0, 168);
+    var eligible = h >= 15;
+    var holidayHours = h >= 40 ? 8 : h / 5;
+    var holidayPay = eligible ? hourly * holidayHours : 0;
+    var workPay = hourly * h;
+    var weekTotal = workPay + holidayPay;
+
+    return {
+      eligible: eligible,
+      hours: h,
+      holidayHours: holidayHours,
+      holidayPay: holidayPay,
+      workPay: workPay,
+      weekTotal: weekTotal,
+      monthWork: workPay * WEEK_WEEKS_PER_MONTH,
+      monthTotal: weekTotal * WEEK_WEEKS_PER_MONTH,
+      monthHoliday: holidayPay * WEEK_WEEKS_PER_MONTH
+    };
+  }
+
+  function updateWeekly(user) {
+    var hourly = parseNum(wkEls.hourly.value);
+    var hours = parseNum(wkEls.hours.value);
+
+    var hero = $('#res-wk-pay');
+    var note = $('#res-wk-note');
+    var elWork = $('#res-wk-work');
+    var elWeek = $('#res-wk-week');
+    var elMonth = $('#res-wk-month');
+    var elMonthBase = $('#res-wk-monthbase');
+
+    function clearAll(msg) {
+      hero.textContent = '—';
+      note.textContent = msg;
+      [elWork, elWeek, elMonth, elMonthBase].forEach(function (el) { el.textContent = '—'; });
+      setCopyText('weekly', '');
+    }
+
+    if (!hourly) { clearAll('시급을 입력해 주세요.'); return; }
+    if (!hours) { clearAll('1주 소정근로시간을 입력해 주세요.'); return; }
+
+    var r = weeklyEstimate(hourly, hours);
+
+    hero.textContent = won(r.holidayPay);
+    note.textContent = r.eligible
+      ? '주 ' + fmt2(r.hours) + '시간 · 주휴 ' + fmt2(r.holidayHours) + '시간분'
+      : '주 소정근로시간 15시간 미만 — 주휴수당 지급 대상이 아닙니다.';
+
+    elWork.textContent = won(r.workPay);
+    elWeek.textContent = won(r.weekTotal);
+    elMonth.textContent = won(r.monthTotal);
+    elMonthBase.textContent = won(r.monthWork);
+
+    var bd = {
+      holhours: $('#bd-wk-holhours'), hourly: $('#bd-wk-hourly'), hours: $('#bd-wk-hours'),
+      pay: $('#bd-wk-pay'), weeks: $('#bd-wk-weeks'), monthpay: $('#bd-wk-monthpay')
+    };
+    if (bd.holhours) bd.holhours.textContent = fmt2(r.holidayHours) + '시간';
+    if (bd.hourly) bd.hourly.textContent = won(hourly);
+    if (bd.hours) bd.hours.textContent = fmt2(r.hours) + '시간';
+    if (bd.pay) bd.pay.textContent = won(r.holidayPay);
+    if (bd.weeks) bd.weeks.textContent = fmt2(WEEK_WEEKS_PER_MONTH) + '주';
+    if (bd.monthpay) bd.monthpay.textContent = won(r.monthHoliday);
+
+    setCopyText('weekly', [
+      '⏰ 주휴수당 (예상) — 데일리툴',
+      '시급 ' + won(hourly) + ' · 주 ' + fmt2(r.hours) + '시간',
+      '주휴수당 ' + won(r.holidayPay) + ' (주휴 ' + fmt2(r.holidayHours) + '시간분)',
+      '주급 ' + won(r.weekTotal) + ' / 월 예상 ' + won(r.monthTotal) + ' (4.345주 기준)',
+      r.eligible ? '주 15시간 이상 개근 시 지급 대상입니다.' : '주 15시간 미만은 주휴수당이 발생하지 않습니다.',
+      'https://' + location.host + '/#weekly'
+    ].join('\n'));
+
+    if (user) queueHistory('weekly', r.eligible ? '주 ' + won(r.holidayPay) : '대상 아님(주 ' + fmt2(r.hours) + '시간)');
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 5) 퍼센트 · 할인율                                                   */
   /* ------------------------------------------------------------------ */
   var percentMode = 'p1';
 
@@ -505,7 +1002,7 @@
     if (lab) lab.textContent = text;
   }
 
-  function updatePercent() {
+  function updatePercent(user) {
     /* p1: 값의 % */
     var x = parseNum($('#p1-x').value);
     var y = parseNum($('#p1-y').value);
@@ -553,10 +1050,30 @@
         ? '할인액 ' + won(price2 - sale) + ' (정가보다 비쌉니다)'
         : '할인액 ' + won(price2 - sale);
     }
+
+    /* 지금 보고 있는 계산 한 줄만 복사/기록한다 */
+    var line = '';
+    if (percentMode === 'p1') {
+      line = fmt(x) + '의 ' + fmt2(y) + '% = ' + won(x * y / 100);
+    } else if (percentMode === 'p2') {
+      line = b === 0 ? '' : fmt(a) + ' ÷ ' + fmt(b) + ' = ' + fmt2(a / b * 100) + '%';
+    } else if (percentMode === 'p3') {
+      line = pct === null ? '' : fmt(from) + ' → ' + fmt(to) + ' = ' + (pct > 0 ? '+' : '') + fmt2(pct) + '%';
+    } else if (percentMode === 'p4') {
+      line = fmt(price) + '의 ' + fmt2(rate) + '% 할인 = ' + won(price - cut) + ' (할인액 ' + won(cut) + ')';
+    } else {
+      line = price2 === 0 ? '' : fmt(price2) + ' → ' + fmt(sale) + ' = ' + fmt2((1 - sale / price2) * 100) + '% 할인';
+    }
+
+    setCopyText('percent', line
+      ? ['🧮 퍼센트·할인 계산 — 데일리툴', line, 'https://' + location.host + '/#percent'].join('\n')
+      : '');
+
+    if (user && line) queueHistory('percent', line);
   }
 
   /* ------------------------------------------------------------------ */
-  /* 4) 오늘의 운세                                                       */
+  /* 6) 오늘의 운세                                                       */
   /* ------------------------------------------------------------------ */
   var ZODIAC = ['쥐', '소', '호랑이', '토끼', '용', '뱀', '말', '양', '원숭이', '닭', '개', '돼지'];
   var ZODIAC_EMOJI = {
@@ -835,7 +1352,7 @@
   }
 
   /* ------------------------------------------------------------------ */
-  /* 5) 심리테스트                                                        */
+  /* 7) 심리테스트                                                        */
   /* ------------------------------------------------------------------ */
   var QUIZZES = {
     spend: {
@@ -1097,6 +1614,7 @@
 
   var quizState = { key: 'spend', step: -1, answers: [] };
   var quizBody = $('#quiz-body');
+  var quizCopyText = '';
 
   function quizCount() {
     return QUIZZES[quizState.key].questions.length;
@@ -1189,10 +1707,21 @@
         '<h3 class="block-title">한 줄 조언</h3>' +
         '<p class="block-text">' + t.tip + '</p></div>' +
         '<div class="quiz-actions">' +
-        '<button type="button" class="btn" data-act="start">다시 하기</button>' +
+        '<button type="button" class="btn" data-act="copy">결과 복사하기</button>' +
+        '<button type="button" class="btn btn-ghost" data-act="start">다시 하기</button>' +
         '<button type="button" class="btn btn-ghost" data-act="other">다른 테스트</button>' +
         '</div>' +
         '</div>';
+
+      quizCopyText = [
+        '🧠 ' + quiz.title + ' 결과 — 데일리툴',
+        t.emoji + ' ' + t.name,
+        t.summary,
+        '강점: ' + t.strengths.join(' / '),
+        '조심할 점: ' + t.watch.join(' / '),
+        '한 줄 조언: ' + t.tip,
+        'https://' + location.host + '/#quiz'
+      ].join('\n');
       return;
     }
 
@@ -1239,6 +1768,7 @@
 
       if (act.dataset.act === 'start') { quizStart(); }
       else if (act.dataset.act === 'back') { quizBack(); }
+      else if (act.dataset.act === 'copy') { copyText(quizCopyText, act); }
       else if (act.dataset.act === 'other') {
         switchQuiz(quizState.key === 'spend' ? 'stress' : 'spend');
       }
@@ -1286,21 +1816,43 @@
     attachNumericInputs();
     attachPresets();
     attachPrivacy();
+    attachCopy();
+    attachSubscribe();
+
+    /* 최근 계산 기록: 저장된 요약만 먼저 그린다 */
+    historyItems = readStore();
+    renderHistory();
+    attachHistory();
 
     /* 연봉 */
     ['input', 'change'].forEach(function (evt) {
-      salaryEls.annual.addEventListener(evt, updateSalary);
-      salaryEls.nonTax.addEventListener(evt, updateSalary);
-      salaryEls.deps.addEventListener(evt, updateSalary);
+      salaryEls.annual.addEventListener(evt, function () { updateSalary(true); });
+      salaryEls.nonTax.addEventListener(evt, function () { updateSalary(true); });
+      salaryEls.deps.addEventListener(evt, function () { updateSalary(true); });
     });
 
     /* 대출 */
     ['input', 'change'].forEach(function (evt) {
-      loanEls.amount.addEventListener(evt, updateLoan);
-      loanEls.term.addEventListener(evt, updateLoan);
-      loanEls.unit.addEventListener(evt, updateLoan);
-      loanEls.rate.addEventListener(evt, updateLoan);
-      loanEls.method.addEventListener(evt, updateLoan);
+      loanEls.amount.addEventListener(evt, function () { updateLoan(true); });
+      loanEls.term.addEventListener(evt, function () { updateLoan(true); });
+      loanEls.unit.addEventListener(evt, function () { updateLoan(true); });
+      loanEls.rate.addEventListener(evt, function () { updateLoan(true); });
+      loanEls.method.addEventListener(evt, function () { updateLoan(true); });
+    });
+
+    /* 퇴직금 */
+    ['input', 'change'].forEach(function (evt) {
+      sevEls.start.addEventListener(evt, function () { updateSeverance(true); });
+      sevEls.end.addEventListener(evt, function () { updateSeverance(true); });
+      sevEls.monthly.addEventListener(evt, function () { updateSeverance(true); });
+      sevEls.bonus.addEventListener(evt, function () { updateSeverance(true); });
+      sevEls.leave.addEventListener(evt, function () { updateSeverance(true); });
+    });
+
+    /* 주휴수당 */
+    ['input', 'change'].forEach(function (evt) {
+      wkEls.hourly.addEventListener(evt, function () { updateWeekly(true); });
+      wkEls.hours.addEventListener(evt, function () { updateWeekly(true); });
     });
 
     /* 퍼센트 */
@@ -1310,7 +1862,7 @@
     ['#p1-x', '#p1-y', '#p2-a', '#p2-b', '#p3-from', '#p3-to',
       '#p4-price', '#p4-rate', '#p5-price', '#p5-sale'].forEach(function (sel) {
         var el = $(sel);
-        if (el) el.addEventListener('input', updatePercent);
+        if (el) el.addEventListener('input', function () { updatePercent(true); });
       });
 
     /* 운세 */
@@ -1323,8 +1875,10 @@
     /* 퀴즈 */
     attachQuiz();
 
-    /* 최초 계산 */
+    /* 최초 계산 (기록에는 남기지 않는다) */
     updateSalary();
+    updateSeverance();
+    updateWeekly();
     updateLoan();
     setPercentMode('p1');
     switchQuiz('spend');
