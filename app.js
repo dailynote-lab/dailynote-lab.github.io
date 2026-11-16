@@ -169,12 +169,25 @@
   var historyPending = {};
   var historyCleared = false;
 
+  function esc(v) {
+    return String(v == null ? '' : v)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
   function readStore() {
     try {
       var raw = window.localStorage.getItem(HISTORY_KEY);
       if (!raw) return [];
       var parsed = JSON.parse(raw);
-      return Object.prototype.toString.call(parsed) === '[object Array]' ? parsed : [];
+      if (Object.prototype.toString.call(parsed) !== '[object Array]') return [];
+      /* 저장소는 이용자가 직접 고칠 수 있으므로 형태를 확인하고 문자열만 받는다 */
+      return parsed.filter(function (r) {
+        return r && typeof r.tool === 'string' && TOOL_SECTION[r.tool] && typeof r.summary === 'string';
+      }).slice(0, HISTORY_MAX);
     } catch (e) { return []; }
   }
 
@@ -209,10 +222,10 @@
       var meta = TOOL_META[r.tool];
       var name = meta ? meta.title : r.tool;
       return '<li>' +
-        '<button type="button" class="history-item" data-tool="' + r.tool + '">' +
-        '<span class="history-name">' + name + '</span>' +
-        '<span class="history-value">' + r.summary + '</span>' +
-        '<span class="history-when">' + whenLabel(r.at) + '</span>' +
+        '<button type="button" class="history-item" data-tool="' + esc(r.tool) + '">' +
+        '<span class="history-name">' + esc(name) + '</span>' +
+        '<span class="history-value">' + esc(r.summary) + '</span>' +
+        '<span class="history-when">' + esc(whenLabel(r.at)) + '</span>' +
         '</button>' +
         '</li>';
     }).join('');
