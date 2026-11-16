@@ -1494,6 +1494,7 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 
 .policy-head {
   display: flex;
+  flex: 0 0 auto;
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
@@ -1536,6 +1537,8 @@ input[type="date"]::-webkit-date-and-time-value { text-align: left; }
 .policy-close:hover { color: var(--text); border-color: var(--line-strong); }
 
 .policy-body {
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 4px 18px 22px;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
