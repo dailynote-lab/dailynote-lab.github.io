@@ -1086,6 +1086,8 @@
   }
 
   function quizAnswer(k) {
+    /* 인트로(step -1)나 결과 화면에서는 응답을 받지 않는다 */
+    if (quizState.step < 0 || quizState.step >= quizCount()) return;
     quizState.answers[quizState.step] = k;
     if (quizState.step < quizCount() - 1) {
       quizState.step += 1;
