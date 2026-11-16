@@ -371,11 +371,13 @@
   /* ------------------------------------------------------------------ */
   /* 로그인 · 클라우드 저장 준비 (Supabase)                                */
   /* ------------------------------------------------------------------ */
-  /* 주소와 키를 비워 두면 라이브러리를 불러오지 않고, 로그인 버튼은
-     정직하게 “준비 중” 안내만 보여 준다. 값을 채워 연결을 켜면 그때만
-     Supabase JS 를 내려받아 로그인·기록 저장을 사용한다.
+  /* 연결 상태: Supabase 프로젝트 ilsangcalc(서울 리전)에 연결되어 있습니다.
+     url·anonKey 를 비우면 라이브러리를 불러오지 않고 “준비 중” 안내만 보여 주고,
+     값이 있으면 로그인 창을 처음 연 시점에 한 번만 Supabase JS 를 내려받아
+     이메일 로그인과 기록 저장을 사용합니다. anonKey 에는 공개(publishable) 키만
+     넣습니다 — service_role·secret 키는 절대 브라우저에 넣지 않습니다.
      테이블 정의와 RLS 정책은 supabase_schema.sql 참고. */
-  var SUPABASE_CONFIG = { url: '', anonKey: '' };
+  var SUPABASE_CONFIG = { url: 'https://xxdhvxkbtkeehwxhdkge.supabase.co', anonKey: 'sb_publishable_GN23zagMU-4tRZbPCV4qeQ_ldO1Mrc5' };
   var SUPABASE_LIB = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';
   var supabaseClient = null;
   var supabaseLoading = null;
@@ -465,6 +467,7 @@
 
     function open() {
       renderAuth();
+      restoreSession();
       if (typeof dlg.showModal === 'function') {
         try { dlg.showModal(); return; } catch (e) { /* fallback */ }
       }
@@ -551,22 +554,25 @@
       });
     }
 
-    /* 연결을 켜 둔 경우에만 이전 세션을 되살린다 */
-    if (supabaseReady()) {
-      var pendingSession = loadSupabase();
-      if (pendingSession) {
-        pendingSession.then(function (client) {
-          if (!client || !client.auth || typeof client.auth.getSession !== 'function') return null;
-          return client.auth.getSession().then(function (res) {
-            var session = res && res.data ? res.data.session : null;
-            authUser = session && session.user ? session.user : null;
-            renderAuth();
-          }, function () { renderAuth(); });
-        }).catch(function () { renderAuth(); });
-      }
-    } else {
-      renderAuth();
+    /* 이전 세션 되살리기 — 페이지를 열 때가 아니라 로그인 창을 처음 열 때
+       한 번만 라이브러리를 불러온다. 그 전까지 외부 요청은 0건이다. */
+    var sessionChecked = false;
+    function restoreSession() {
+      if (sessionChecked || !supabaseReady()) return;
+      sessionChecked = true;
+      var pending = loadSupabase();
+      if (!pending) { renderAuth(); return; }
+      pending.then(function (client) {
+        if (!client || !client.auth || typeof client.auth.getSession !== 'function') return null;
+        return client.auth.getSession().then(function (res) {
+          var session = res && res.data ? res.data.session : null;
+          authUser = session && session.user ? session.user : null;
+          renderAuth();
+        }, function () { renderAuth(); });
+      }).catch(function () { /* 라이브러리를 못 불러와도 계산 기능은 그대로 동작한다 */ });
     }
+
+    renderAuth();
   }
 
   /* ------------------------------------------------------------------ */

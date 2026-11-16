@@ -36,10 +36,10 @@
 - **도구 영역(workspace)**: 제목과 그룹 표기를 함께 보여 주는 머리말 + 옅은 배경 판으로 목록·참고자료와 분리했습니다.
 - **결과 복사**: 계산기 5개, 사주, 오늘의 운세, 심리테스트 결과에 **결과 복사하기** 버튼. 결과 요약과 사이트 주소가 함께 복사되어 바로 공유할 수 있습니다(클립보드 API 미지원·차단 환경은 `execCommand` 폴백).
 - **최근 계산 기록**: 계산할 때마다 **결과 요약 + 시각 + 도구 이름**만 브라우저 `localStorage`(`daily-tool:history:v1`)에 최대 8개 저장하고, 도구 영역 아래에 보여 줍니다. 항목을 누르면 그 도구로 이동하고, **내 기록 지우기** 버튼으로 즉시 삭제합니다. 입력값(연봉·생년월일 등)은 저장하지 않습니다(사주는 간지 요약이 곧 생일 정보이므로 방침 2항에 그 사실을 적었습니다).
-- **로그인 / 내 기록 저장 (준비 중)**: 헤더 버튼과 사주·기록 영역의 안내 문구로 엽니다. `SUPABASE_CONFIG` 가 비어 있는 동안에는 **라이브러리를 불러오지 않고** “회원가입·클라우드 저장 오픈 준비 중이에요 (현재는 이 기기에 자동 저장됩니다)” 만 정직하게 안내합니다. 로그인한 척하지 않습니다.
+- **로그인 / 내 기록 저장 (연결됨)**: 헤더 버튼과 사주·기록 영역의 안내 문구로 엽니다. Supabase 프로젝트 `ilsangcalc`(서울 `ap-northeast-2`)에 이메일+비밀번호 인증으로 연결되어 있습니다. 인증 라이브러리(`@supabase/supabase-js`)는 **로그인 창을 처음 열 때 한 번만** 내려받습니다(`restoreSession()`). `SUPABASE_CONFIG` 를 비우면 예전처럼 “오픈 준비 중” 안내만 보여 주고 아무 요청도 보내지 않습니다.
 - **소식 받아보기(옵트인 구독)**: 이메일 + 명시적 동의 체크박스. 백엔드 주소(`NEWSLETTER.endpoint`)가 비어 있으면 **아무 것도 전송·저장하지 않고** “베타 준비 중” 안내만 보여 줍니다(성공한 척하지 않음).
 - **참고 자료/FAQ**: 사주 계산 방법, 시간 모름, 사주 풀이의 한계까지 FAQ 에 넣었습니다.
-- **개인정보처리방침**: 푸터 버튼으로 여는 모달(`#privacy-dialog`). 입력값이 서버로 전송되지 않는다는 점, 최근 계산 기록이 **로컬스토리지에만** 저장되고 언제든 지울 수 있다는 점, 쿠키·분석·광고 스크립트가 없다는 점, 로그인·클라우드 저장이 **아직 연결 전**이며 연결 시 Supabase 와 RLS 정책을 쓴다는 점, GA4·AdSense 도입 시 방침을 먼저 갱신한다는 점을 적었습니다.
+- **개인정보처리방침**: 푸터 버튼으로 여는 모달(`#privacy-dialog`). 입력값이 서버로 전송되지 않는다는 점, 최근 계산 기록이 **로컬스토리지에만** 저장되고 언제든 지울 수 있다는 점, 쿠키·분석·광고 스크립트가 없다는 점, **로그인·기록 저장이 Supabase Auth/DB(서울 리전)로 실제 연결되어 있다는 점**과 RLS·보유 기간·탈퇴 방법, GA4·AdSense 도입 시 방침을 먼저 갱신한다는 점을 적었습니다.
 
 ## 파일 구성
 
@@ -54,22 +54,42 @@ sitemap.xml         사이트맵
 .nojekyll           GitHub Pages 의 Jekyll 처리 비활성화
 ```
 
-## Supabase 로그인·클라우드 저장 연결하기
+## Supabase 로그인·기록 저장 (연결 상태)
+
+| 항목 | 값 |
+|---|---|
+| 프로젝트 이름 | `ilsangcalc` |
+| 프로젝트 ref | `xxdhvxkbtkeehwxhdkge` |
+| Project URL | `https://xxdhvxkbtkeehwxhdkge.supabase.co` |
+| 리전 | Northeast Asia (Seoul) · `ap-northeast-2` |
+| 플랜 | Free |
+| 조직 | `ilsangcalc` (Free) |
+| Site URL | `https://dailynote-lab.github.io/` |
+| Redirect URLs | `https://dailynote-lab.github.io/**` |
+| 인증 방식 | Email (+ Confirm email 켜짐) |
+
+`app.js` 의 설정값은 아래 한 줄입니다. `anonKey` 에는 **공개(publishable) 키**만 넣습니다.
+
+```js
+var SUPABASE_CONFIG = { url: 'https://xxdhvxkbtkeehwxhdkge.supabase.co', anonKey: 'sb_publishable_…' };
+```
+
+- 데이터베이스 비밀번호는 대시보드에서 생성해 Supabase 가 관리하며, 저장소·코드·문서 어디에도 적지 않았습니다. 필요하면 **Project Settings > Database** 에서 재설정하면 됩니다. 앱은 브라우저에서 공개 키만 쓰므로 DB 비밀번호는 사이트 운영에 필요하지 않습니다.
+- **service_role / secret 키는 절대 브라우저에 넣지 않습니다.** 저장소에 비밀 키가 들어가지 않았는지는 `_check_daily_utility_hub.py` 가 검사합니다.
+- 인증 라이브러리는 **로그인 창을 처음 열 때 한 번만** 동적으로 불러옵니다(`restoreSession()`). 그 전까지 외부 스크립트 요청은 0건입니다.
+- 로그인하면 `saved_calculations` 에 `{ user_id, tool, summary }` 를 넣고, 조회·수정·삭제는 모두 RLS(`auth.uid() = user_id`)로 본인 행만 허용됩니다.
+- 확인된 동작(2026-11-16): `/rest/v1/profiles`·`/rest/v1/saved_calculations`·`/rest/v1/newsletter_subscribers` 모두 200(빈 배열), 비로그인 INSERT 는 `401 42501 new row violates row-level security policy` 로 거부, `/auth/v1/token` 은 `400 invalid_credentials` 로 응답(인증 서비스 정상).
+
+### 처음부터 다시 설정해야 할 때
 
 1. Supabase 프로젝트를 만들고 **Authentication > Providers** 에서 Email 을 켭니다.
 2. `supabase_schema.sql` 전체를 **SQL Editor** 에 붙여 실행합니다.
    - `profiles` (사용자 한 명당 한 행) · `saved_calculations` (기록) · `newsletter_subscribers` (옵트인 구독)
    - 세 테이블 모두 **RLS 를 켜고** 조회/입력/수정/삭제 정책을 `auth.uid() = user_id` 로 제한합니다.
    - 가입 시 `profiles` 행을 만드는 트리거, `updated_at` 갱신 트리거 포함.
-3. **Project Settings > API** 의 Project URL 과 `anon` public key 를 `app.js` 에 넣습니다.
-
-```js
-var SUPABASE_CONFIG = { url: 'https://<project>.supabase.co', anonKey: '<anon public key>' };
-```
-
-- 두 값이 모두 채워졌을 때만 `@supabase/supabase-js` 를 **동적으로** 불러옵니다(`loadSupabase()`). 그 전까지 외부 스크립트 요청은 0건이고 개인정보처리방침의 “외부 스크립트 없음”도 사실 그대로 유지됩니다.
-- 로그인하면 `saved_calculations` 에 `{ user_id, tool, summary }` 를 넣습니다. **service_role 키는 절대 브라우저에 넣지 마세요.**
-- 연결을 켜기 전에 개인정보처리방침 7항(수집 항목·목적·보유 기간·회원 탈퇴 방법)을 실제 동작에 맞춰 갱신하세요.
+3. **Project Settings > API** 의 Project URL 과 공개 키를 `app.js` 의 `SUPABASE_CONFIG` 에 넣습니다.
+4. **Authentication > URL Configuration** 의 Site URL 을 사이트 주소로 바꾸고, 리다이렉트 URL 에 `https://dailynote-lab.github.io/**` 를 추가합니다.
+5. 개인정보처리방침 7항(수집 항목·목적·보유 기간·회원 탈퇴 방법)을 실제 동작에 맞춰 갱신합니다.
 
 ## 뉴스레터(구독) 백엔드 연결하기
 
@@ -137,7 +157,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://dailynote-lab.github.io/
 
 입력한 값은 브라우저 안에서만 계산되고 서버로 전송되지 않습니다.
 최근 계산 기록은 **결과 요약만** 브라우저 로컬스토리지에 저장되며 “내 기록 지우기”로 삭제됩니다.
-로그인·클라우드 저장은 아직 연결 전이라 계정 정보를 받지 않습니다. 연결하면 이메일과 저장한 기록만 Supabase 에 보관하고 RLS 로 본인 것만 열람합니다.
+로그인·기록 저장은 Supabase Auth/DB(서울 리전)에 연결되어 있습니다. 로그인하면 이메일과 저장한 기록만 보관하고 RLS 로 본인 것만 열람합니다.
 구독 이메일은 이용자가 직접 입력하고 동의한 경우에만 다루며, 백엔드 미연결 상태에서는 전송·저장하지 않습니다.
 설정이 비어 있는 동안에는 외부 스크립트·폰트·분석 도구를 하나도 불러오지 않습니다.
 
