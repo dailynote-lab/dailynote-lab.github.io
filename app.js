@@ -254,6 +254,7 @@
   /* 입력할 때마다 쌓지 않도록 잠깐 모았다가 한 번에 기록한다 */
   function queueHistory(tool, summary) {
     if (!tool || !summary) return;
+    trackTool(tool);
     historyPending[tool] = summary;
     if (historyTimer) clearTimeout(historyTimer);
     historyTimer = setTimeout(flushHistory, 800);
@@ -449,6 +450,9 @@
         ? authUser.email + ' 로 연결됨'
         : '지금은 이 기기에 자동 저장 중';
     }
+
+    /* 관리자(소유자)로 로그인했을 때만 방문자 통계 버튼이 나타난다 */
+    syncAdminUI();
   }
 
   /* 로그인한 사용자의 기록은 계정에도 남긴다(연결했을 때만) */
@@ -573,6 +577,298 @@
     }
 
     renderAuth();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* 방문 카운터 · 관리자 통계 (Supabase)                                  */
+  /* ------------------------------------------------------------------ */
+  /* 방문은 “날짜(한국 시간) + 도구 이름” 조합의 숫자만 1 늘립니다.
+     IP·쿠키·브라우저 지문·방문자별 기록은 보내지도 저장하지도 않습니다.
+     집계 테이블(daily_visits)은 RLS 로 막혀 있고, 소유자 이메일(ADMIN_EMAIL)
+     한 명만 읽을 수 있습니다. 통계 화면도 그 계정으로 로그인했을 때만 나타납니다.
+     기록이 실패해도 계산기·운세는 그대로 동작합니다(try/catch, 실패는 조용히). */
+  var ADMIN_EMAIL = 'm01033669064@gmail.com';
+  var VISIT_RPC_PATH = '/rest/v1/rpc/record_page_visit';
+  var VISIT_HOME_FLAG = 'daily-tool:visit:home';
+  var VISIT_TOOL_GAP_MS = 6000;
+  var VISIT_STATS_PAGE = 1000;
+  var visitHomeSent = false;
+  var visitLastSentAt = {};
+
+  function isAdmin() {
+    return !!(authUser && authUser.email &&
+      String(authUser.email).toLowerCase() === ADMIN_EMAIL);
+  }
+
+  function sessionFlag(key) {
+    try {
+      return typeof sessionStorage !== 'undefined' && !!sessionStorage.getItem(key);
+    } catch (e) { return false; }
+  }
+
+  function setSessionFlag(key) {
+    try {
+      if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(key, '1');
+    } catch (e) { /* 저장이 막혔으면 그냥 다시 센다 */ }
+  }
+
+  /* record_page_visit(p_tool) 한 번 호출. Supabase JS 를 쓰지 않고 가벼운
+     fetch 한 번만 보낸다(방문마다 라이브러리를 내려받지 않음). */
+  function recordVisit(toolKey) {
+    if (!supabaseReady() || typeof fetch !== 'function') return;
+    var key = String(toolKey || 'home').toLowerCase();
+    if (!/^[a-z0-9_-]{1,32}$/.test(key)) key = 'home';
+    try {
+      var req = fetch(SUPABASE_CONFIG.url + VISIT_RPC_PATH, {
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'omit',
+        keepalive: true,
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_CONFIG.anonKey,
+          'Authorization': 'Bearer ' + SUPABASE_CONFIG.anonKey,
+          'Prefer': 'return=minimal'
+        },
+        body: JSON.stringify({ p_tool: key })
+      });
+      if (req && typeof req.then === 'function') {
+        req.then(function () { }, function () { });
+      }
+    } catch (e) { /* 오프라인·차단 환경에서는 조용히 넘어간다 */ }
+  }
+
+  /* 같은 도구를 연달아 여러 번 실행할 때(입력할 때마다 계산되는 경우)
+     한 번으로 묶는다. */
+  function trackTool(toolKey) {
+    if (!toolKey) return;
+    var now = Date.now();
+    if (now - (visitLastSentAt[toolKey] || 0) < VISIT_TOOL_GAP_MS) return;
+    visitLastSentAt[toolKey] = now;
+    recordVisit(toolKey);
+  }
+
+  /* 홈 방문은 탭 세션당 한 번만 센다(새로고침 반복으로 부풀리지 않음) */
+  function trackHomeVisit() {
+    if (visitHomeSent || sessionFlag(VISIT_HOME_FLAG)) return;
+    visitHomeSent = true;
+    setSessionFlag(VISIT_HOME_FLAG);
+    recordVisit('home');
+  }
+
+  /* ---------- 통계 화면 ---------- */
+  var statsDialog = $('#stats-dialog');
+  var statsEls = {
+    today: $('#stats-today'),
+    week: $('#stats-week'),
+    total: $('#stats-total'),
+    chart: $('#stats-chart'),
+    tools: $('#stats-tools'),
+    meta: $('#stats-meta'),
+    refresh: $('#stats-refresh')
+  };
+
+  function syncAdminUI() {
+    var btn = $('#open-stats');
+    var on = isAdmin();
+    if (btn) btn.hidden = !on;
+    if (!on) closeStatsDialog();
+  }
+
+  /* KST(UTC+9) 기준 날짜 키 YYYY-MM-DD */
+  function kstDateKey(ms) {
+    var t = (typeof ms === 'number' ? ms : Date.now()) + 9 * 3600 * 1000;
+    return new Date(t).toISOString().slice(0, 10);
+  }
+
+  function kstShiftKey(key, delta) {
+    var d = new Date(String(key) + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function kstTimeLabel() {
+    var d = new Date(Date.now() + 9 * 3600 * 1000);
+    return ('0' + d.getUTCHours()).slice(-2) + ':' + ('0' + d.getUTCMinutes()).slice(-2);
+  }
+
+  function visitToolLabel(key) {
+    if (key === 'home') return '홈 방문';
+    var meta = TOOL_META[key];
+    return meta ? meta.title : key;
+  }
+
+  function statsMessage(text) {
+    if (statsEls.meta) statsEls.meta.textContent = text || '';
+  }
+
+  function renderVisitStats(rows) {
+    var todayKey = kstDateKey();
+    var byDate = {};
+    var byTool = {};
+    var total = 0;
+
+    (rows || []).forEach(function (row) {
+      if (!row) return;
+      var d = String(row.visit_date || '');
+      var k = String(row.tool_key || 'home');
+      var n = Number(row.visit_count) || 0;
+      if (!d || n <= 0) return;
+      byDate[d] = (byDate[d] || 0) + n;
+      byTool[k] = (byTool[k] || 0) + n;
+      total += n;
+    });
+
+    var days = [];
+    for (var i = 6; i >= 0; i -= 1) {
+      var key = kstShiftKey(todayKey, -i);
+      days.push({ key: key, label: key.slice(5).replace('-', '/'), count: byDate[key] || 0 });
+    }
+
+    var weekTotal = 0;
+    for (var j = 0; j < days.length; j += 1) weekTotal += days[j].count;
+    var today = byDate[todayKey] || 0;
+
+    if (statsEls.today) statsEls.today.textContent = nf0.format(today);
+    if (statsEls.week) statsEls.week.textContent = nf0.format(weekTotal);
+    if (statsEls.total) statsEls.total.textContent = nf0.format(total);
+
+    var max = 0;
+    days.forEach(function (d) { if (d.count > max) max = d.count; });
+    if (statsEls.chart) {
+      statsEls.chart.innerHTML = days.map(function (d) {
+        var pct = max ? Math.round((d.count / max) * 100) : 0;
+        if (d.count > 0 && pct < 8) pct = 8;
+        if (pct < 2) pct = 2;
+        return '<div class="stats-bar-col">' +
+          '<span class="stats-bar-count">' + nf0.format(d.count) + '</span>' +
+          '<span class="stats-bar-track"><span class="stats-bar" style="height:' + pct + '%" aria-hidden="true"></span></span>' +
+          '<span class="stats-bar-day">' + d.label + '</span>' +
+          '</div>';
+      }).join('');
+      statsEls.chart.setAttribute('aria-label', '최근 7일 일별 방문자 추이 — ' +
+        days.map(function (d) { return d.label + ' ' + nf0.format(d.count) + '회'; }).join(', '));
+    }
+
+    var top = Object.keys(byTool).map(function (k) { return { key: k, count: byTool[k] }; })
+      .sort(function (a, b) { return b.count - a.count; })
+      .slice(0, 5);
+    if (statsEls.tools) {
+      if (!top.length) {
+        statsEls.tools.innerHTML = '<li class="stats-rank-empty">아직 쌓인 기록이 없어요. 방문이 생기면 여기에 나타납니다.</li>';
+      } else {
+        statsEls.tools.innerHTML = top.map(function (t, idx) {
+          return '<li class="stats-rank-item">' +
+            '<span class="stats-rank-no">' + (idx + 1) + '</span>' +
+            '<span class="stats-rank-name">' + esc(visitToolLabel(t.key)) + '</span>' +
+            '<span class="stats-rank-count">' + nf0.format(t.count) + '회</span>' +
+            '</li>';
+        }).join('');
+      }
+    }
+
+    statsMessage('관리자 전용 · ' + kstTimeLabel() + ' 불러옴');
+  }
+
+  /* 테이블은 (날짜·도구)마다 한 행이라 작다. 1000행씩 나눠 받아 모두 더한다. */
+  function fetchVisitRows(from, acc) {
+    return supabaseClient.from('daily_visits')
+      .select('visit_date,tool_key,visit_count')
+      .order('visit_date', { ascending: true })
+      .order('tool_key', { ascending: true })
+      .range(from, from + VISIT_STATS_PAGE - 1)
+      .then(function (res) {
+        if (res && res.error) throw res.error;
+        var rows = (res && res.data) || [];
+        var next = acc.concat(rows);
+        if (rows.length < VISIT_STATS_PAGE || next.length >= 20000) return next;
+        return fetchVisitRows(from + VISIT_STATS_PAGE, next);
+      });
+  }
+
+  function loadVisitStats() {
+    if (!isAdmin()) return;
+    if (!supabaseClient) { statsMessage('통계를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.'); return; }
+    statsMessage('불러오는 중이에요…');
+    fetchVisitRows(0, []).then(function (rows) {
+      renderVisitStats(rows);
+    }, function () {
+      statsMessage('통계를 불러오지 못했어요. 잠시 뒤 다시 시도해 주세요.');
+    });
+  }
+
+  function openStatsDialog() {
+    if (!isAdmin() || !statsDialog) return;
+    if (typeof statsDialog.showModal === 'function') {
+      try { statsDialog.showModal(); } catch (e) { statsDialog.setAttribute('open', ''); }
+    } else {
+      statsDialog.setAttribute('open', '');
+    }
+    loadVisitStats();
+  }
+
+  function closeStatsDialog() {
+    if (!statsDialog) return;
+    if (typeof statsDialog.close === 'function') {
+      try { statsDialog.close(); return; } catch (e) { /* fallback */ }
+    }
+    statsDialog.removeAttribute('open');
+  }
+
+  function attachStats() {
+    var btn = $('#open-stats');
+    if (btn) {
+      btn.addEventListener('click', function (e) {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        openStatsDialog();
+      });
+    }
+    var closeBtn = $('#close-stats');
+    if (closeBtn) closeBtn.addEventListener('click', closeStatsDialog);
+    if (statsDialog) {
+      statsDialog.addEventListener('click', function (e) { if (e.target === statsDialog) closeStatsDialog(); });
+    }
+    if (statsEls.refresh) statsEls.refresh.addEventListener('click', function () { loadVisitStats(); });
+    syncAdminUI();
+  }
+
+  /* 이미 로그인해 두었다면(브라우저에 세션이 남아 있으면) 페이지를 열 때
+   세션을 되살려 관리자 통계 버튼을 바로 보여 준다. 세션이 없는 방문자에게는
+   라이브러리도 내려받지 않는다(외부 요청 0건 유지). */
+  function hasStoredAuth() {
+    try {
+      if (typeof localStorage === 'undefined' || !localStorage ||
+        typeof localStorage.getItem !== 'function') return false;
+      var ref = String(SUPABASE_CONFIG.url || '').replace(/^https:\/\/([^.]+)\..*$/, '$1');
+      if (ref && localStorage.getItem('sb-' + ref + '-auth-token')) return true;
+      var n = typeof localStorage.length === 'number' ? localStorage.length : 0;
+      for (var i = 0; i < n; i += 1) {
+        var k = typeof localStorage.key === 'function' ? localStorage.key(i) : '';
+        if (k && k.indexOf('sb-') === 0 && k.indexOf('-auth-token') > 0) return true;
+      }
+      return false;
+    } catch (e) { return false; }
+  }
+
+  function bootstrapSession() {
+    if (!supabaseReady() || !hasStoredAuth()) return;
+    var pending = loadSupabase();
+    if (!pending) return;
+    pending.then(function (client) {
+      if (!client || !client.auth) return null;
+      if (typeof client.auth.onAuthStateChange === 'function') {
+        client.auth.onAuthStateChange(function (evt, session) {
+          authUser = session && session.user ? session.user : null;
+          renderAuth();
+        });
+      }
+      if (typeof client.auth.getSession !== 'function') return null;
+      return client.auth.getSession().then(function (res) {
+        var session = res && res.data ? res.data.session : null;
+        authUser = session && session.user ? session.user : null;
+        renderAuth();
+      }, function () { renderAuth(); });
+    }, function () { /* 세션 복원 실패는 조용히 넘어간다 */ });
   }
 
   /* ------------------------------------------------------------------ */
@@ -1526,6 +1822,7 @@
     }).join('');
 
     currentFortune = { f: f, who: whoParts.join(' · ') };
+    trackTool('fortune');
   }
 
   function copyFortune() {
@@ -1912,6 +2209,7 @@
     if (quizState.step >= quizCount()) {
       var r = quizResult();
       var t = r.type;
+      trackTool('quiz');
       quizBody.innerHTML =
         '<div class="quiz-result">' +
         '<div class="quiz-emoji">' + t.emoji + '</div>' +
@@ -2459,6 +2757,9 @@
     attachCopy();
     attachSubscribe();
     attachAuth();
+    attachStats();
+    bootstrapSession();
+    trackHomeVisit();
 
     /* 최근 계산 기록: 저장된 요약만 먼저 그린다 */
     historyItems = readStore();

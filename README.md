@@ -47,7 +47,7 @@
 index.html          페이지 마크업 + SEO 메타 + JSON-LD(WebSite/WebApplication/FAQPage)
 styles.css          모바일 우선 스타일, 다크 모드 대응
 app.js              계산 로직·사주 계산·운세 생성·테스트 진행·복사·기록·구독·로그인 준비
-supabase_schema.sql 로그인·클라우드 저장용 Supabase 스키마(테이블 3개 + RLS 정책)
+supabase_schema.sql 로그인·클라우드 저장·방문 카운터용 Supabase 스키마(테이블 4개 + RLS 정책 + RPC)
 favicon.svg         아이콘
 robots.txt          크롤링 허용 + 사이트맵 위치
 sitemap.xml         사이트맵
@@ -78,6 +78,7 @@ var SUPABASE_CONFIG = { url: 'https://xxdhvxkbtkeehwxhdkge.supabase.co', anonKey
 - **service_role / secret 키는 절대 브라우저에 넣지 않습니다.** 저장소에 비밀 키가 들어가지 않았는지는 `_check_daily_utility_hub.py` 가 검사합니다.
 - 인증 라이브러리는 **로그인 창을 처음 열 때 한 번만** 동적으로 불러옵니다(`restoreSession()`). 그 전까지 외부 스크립트 요청은 0건입니다.
 - 로그인하면 `saved_calculations` 에 `{ user_id, tool, summary }` 를 넣고, 조회·수정·삭제는 모두 RLS(`auth.uid() = user_id`)로 본인 행만 허용됩니다.
+- 방문 집계는 `daily_visits` 에 **날짜·도구별 횟수만** 쌓고, 읽기는 소유자 이메일에만 열려 있습니다(위 “방문자 통계” 항목).
 - 확인된 동작(2026-11-16): `/rest/v1/profiles`·`/rest/v1/saved_calculations`·`/rest/v1/newsletter_subscribers` 모두 200(빈 배열), 비로그인 INSERT 는 `401 42501 new row violates row-level security policy` 로 거부, `/auth/v1/token` 은 `400 invalid_credentials` 로 응답(인증 서비스 정상).
 
 ### 처음부터 다시 설정해야 할 때
@@ -90,6 +91,27 @@ var SUPABASE_CONFIG = { url: 'https://xxdhvxkbtkeehwxhdkge.supabase.co', anonKey
 3. **Project Settings > API** 의 Project URL 과 공개 키를 `app.js` 의 `SUPABASE_CONFIG` 에 넣습니다.
 4. **Authentication > URL Configuration** 의 Site URL 을 사이트 주소로 바꾸고, 리다이렉트 URL 에 `https://dailynote-lab.github.io/**` 를 추가합니다.
 5. 개인정보처리방침 7항(수집 항목·목적·보유 기간·회원 탈퇴 방법)을 실제 동작에 맞춰 갱신합니다.
+
+## 방문자 통계 (관리자 전용)
+
+사이트 소유자 계정 **`m01033669064@gmail.com`** 으로 로그인했을 때만 헤더에 **📊 방문자 통계** 버튼이 나타납니다. 일반 방문자와 다른 로그인 사용자에게는 버튼도, 집계도 보이지 않습니다.
+
+| 보이는 것 | 계산 방식 |
+|---|---|
+| 오늘 방문 | 오늘(한국 시간) `daily_visits.visit_count` 합 |
+| 최근 7일 | 오늘 포함 7일 합 |
+| 누적 방문 | 전체 기간 합 |
+| 최근 7일 일별 추이 | 날짜별 막대 7개 |
+| 인기 도구 TOP 5 | 도구별(누적) 실행 횟수 |
+
+- **무엇을 저장하나**: `daily_visits` 테이블에 `(visit_date, tool_key)` 마다 **숫자 하나**만 쌓입니다. 예: `2026-11-17 / home / 42`. IP 주소·쿠키·브라우저 지문·세션 값·방문자별 기록은 **저장하지 않습니다**.
+- **어떻게 세나**: 페이지 진입 시 탭 세션당 1회 `home`, 도구를 실행할 때마다 해당 키(`salary`·`severance`·`weekly`·`loan`·`percent`·`fortune`·`saju`·`quiz`)로 `/rest/v1/rpc/record_page_visit` 를 호출합니다. 입력할 때마다 계산되는 도구는 6초 안의 반복을 한 번으로 묶습니다. 기록 요청이 실패해도 계산기·운세는 그대로 동작합니다(`try/catch`).
+- **어떻게 막나**: `daily_visits` 는 RLS 를 켜고 **SELECT 정책을 소유자 이메일 하나에만** 열었습니다(`(auth.jwt() ->> 'email') = 'm01033669064@gmail.com'`). INSERT/UPDATE/DELETE 정책은 만들지 않고 `anon`·`authenticated` 의 직접 쓰기 권한도 회수했습니다. 쓰기는 `security definer` 함수 `record_page_visit(p_tool text)` 만 할 수 있고, 이 함수가 할 수 있는 일은 “오늘(KST) 날짜 + 허용된 도구 키” 카운터를 1 늘리는 것뿐입니다.
+- 수파베이스 JS 라이브러리는 방문 기록에 쓰지 않습니다(fetch 한 번). 라이브러리는 로그인 창을 열거나, 브라우저에 로그인 세션이 남아 있을 때만 불러옵니다.
+
+### SQL 실행
+
+`supabase_schema.sql` 의 **4번(방문 카운터)** 부분만 SQL Editor 에 붙여 실행해도 됩니다(기존 스키마가 적용된 상태에서 다시 실행해도 안전하게 `if not exists` / `create or replace` 로 작성됨).
 
 ## 뉴스레터(구독) 백엔드 연결하기
 
@@ -158,6 +180,7 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://dailynote-lab.github.io/
 입력한 값은 브라우저 안에서만 계산되고 서버로 전송되지 않습니다.
 최근 계산 기록은 **결과 요약만** 브라우저 로컬스토리지에 저장되며 “내 기록 지우기”로 삭제됩니다.
 로그인·기록 저장은 Supabase Auth/DB(서울 리전)에 연결되어 있습니다. 로그인하면 이메일과 저장한 기록만 보관하고 RLS 로 본인 것만 열람합니다.
+방문 통계는 개인 식별 정보 없이 **날짜·도구별 횟수만** 세며(IP·쿠키·방문자별 기록 없음), 집계는 사이트 소유자 계정으로만 볼 수 있습니다.
 구독 이메일은 이용자가 직접 입력하고 동의한 경우에만 다루며, 백엔드 미연결 상태에서는 전송·저장하지 않습니다.
 설정이 비어 있는 동안에는 외부 스크립트·폰트·분석 도구를 하나도 불러오지 않습니다.
 
@@ -169,4 +192,5 @@ curl -sS -o /dev/null -w "%{http_code}\n" https://dailynote-lab.github.io/
 python3 projects/_check_daily_utility_hub.py   # 구조·참조·클래스·XML 정적 검증(+브랜드·도구 8개·사주·로그인·스키마)
 python3 projects/_test_daily_utility_hub.py    # 계산 함수를 V8 로 실제 실행해 독립 구현·KASI 발표값과 대조(사주 절기·일주·시주 포함)
 python3 projects/_smoke_daily_utility_hub.py   # 스텁 DOM 위에서 app.js 초기화·탭 전환·사주 렌더·복사·기록·로그인 안내 확인
+python3 projects/_check_visit_stats.py         # 방문자 통계: SQL(RLS·RPC)·관리자 게이팅·KST 날짜·7일 집계·RPC 요청 형태 검증
 ```
